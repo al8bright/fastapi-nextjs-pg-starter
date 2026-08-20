@@ -29,6 +29,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # 실행 환경 — "production" 이면 안전하지 않은 기본값으로 기동하지 않는다 (main.py 의 fail-fast).
+    app_env: str = "development"
+
     # DB
     database_url: str | None = None
 
@@ -39,9 +42,10 @@ class Settings(BaseSettings):
     # 시각대 (architecture.md §10 KST 단일 기준)
     tz: str = "Asia/Seoul"
 
-    # 초기 시드 — 운영에서는 SEED_DEFAULT_ADMIN=false 로 끄거나 초기 비밀번호를 주입한다.
-    seed_default_admin: bool = True
-    default_admin_password: str = "admin123"
+    # 초기 시드 — 기본은 꺼져 있다. 개발 환경에서만 .env 로 켠다(스캐폴드가 무작위 비밀번호와 함께 켜준다).
+    # ⛔ 비밀번호에 기본값을 두지 않는다. 두면 설정을 빠뜨린 모든 배포가 같은 자격증명을 갖게 된다.
+    seed_default_admin: bool = False
+    default_admin_password: str | None = None
 
     # CORS
     cors_origins: str = "http://localhost:3000"

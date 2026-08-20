@@ -2,6 +2,7 @@ import "server-only"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { FastapiError, fastapiFetch } from "@/lib/server/fastapi"
+import { SESSION_COOKIE } from "@/lib/session-cookie"
 import type { User } from "@/lib/types"
 
 // 세션 = httpOnly 쿠키 단일 출처 (architecture.md §14).
@@ -9,8 +10,9 @@ import type { User } from "@/lib/types"
 // 이 토큰은 **브라우저 JS 가 읽을 수 없다**. 따라서 XSS 로 토큰을 탈취당하지 않고,
 // 대신 FastAPI 호출은 전부 서버(서버 컴포넌트 / Server Action)에서만 일어난다.
 
-/** 쿠키 이름 — 같은 도메인에 여러 프로젝트를 올릴 때 충돌하지 않도록 프로젝트별로 분리한다. */
-export const SESSION_COOKIE = "__PROJECT_SNAKE___session"
+// 쿠키 이름은 middleware(Edge)도 써야 해서 의존성 없는 모듈에 두고 여기서 다시 내보낸다.
+// (이 파일을 middleware 가 import 하면 server-only·next/headers 가 Edge 번들로 끌려온다)
+export { SESSION_COOKIE } from "@/lib/session-cookie"
 
 // 백엔드 ACCESS_TOKEN_EXPIRE_MINUTES(기본 30분)와 맞춘다.
 // 쿠키가 토큰보다 오래 살면 middleware 는 통과시키는데 FastAPI 가 401 을 주는 구간이 생긴다.
@@ -42,6 +44,29 @@ export async function setSessionToken(token: string): Promise<void> {
 export async function clearSessionToken(): Promise<void> {
   const store = await cookies()
   store.delete(SESSION_COOKIE)
+}
+
+/**
+ * 세션이 **실제로 유효한지** 확인한다. 리다이렉트하지 않고 boolean 만 돌려준다.
+ *
+ * ⚠️ 쿠키의 존재는 로그인 상태가 아니다. 쿠키는 살아 있는데 토큰만 무효인 구간이
+ *    반드시 생긴다(SECRET_KEY 교체, 계정 비활성화·삭제, 만료, 시계 오차).
+ *    그 구간에서 로그인 화면이 쿠키만 보고 보호 경로로 되돌려 보내면
+ *    `/login ↔ 보호경로` 무한 리다이렉트가 되어 **사이트 전체가 잠긴다**
+ *    (로그아웃 버튼도 보호 경로 안에 있어 탈출구가 없다).
+ *    그래서 로그인 화면은 존재가 아니라 유효성으로 판단해야 한다.
+ */
+export async function hasValidSession(): Promise<boolean> {
+  const token = await getSessionToken()
+  if (!token) return false
+  try {
+    await fastapiFetch<User>({ path: "/auth/me", token })
+    return true
+  } catch {
+    // 무효 토큰도 백엔드 장애도 로그인 폼을 보여준다.
+    // 로그인에 성공하면 setSessionToken 이 낡은 쿠키를 덮어쓰므로 루프가 스스로 풀린다.
+    return false
+  }
 }
 
 /**
