@@ -97,43 +97,12 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
-      - name: Parse all .ps1 with Windows PowerShell 5.1
+      - name: Check .ps1 syntax with Windows PowerShell 5.1
         shell: powershell # pwsh 가 아니라 5.1 이어야 의미가 있다
-        run: |
-          $failed = $false
-          $files = Get-ChildItem -Path . -Recurse -File -Force -Filter *.ps1
-          if (-not $files) { Write-Host "검사할 .ps1 없음"; exit 0 }
-          foreach ($f in $files) {
-            $errors = $null
-            [void][System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$errors)
-            if ($errors.Count -gt 0) {
-              $failed = $true
-              Write-Host "::error file=$($f.FullName)::구문 오류 $($errors.Count)건"
-              foreach ($e in $errors) {
-                Write-Host ("  L{0}:{1} {2}" -f $e.Extent.StartLineNumber, $e.Extent.StartColumnNumber, $e.Message)
-              }
-            } else {
-              Write-Host "OK  $($f.FullName)"
-            }
-          }
-          if ($failed) { exit 1 }
-      - name: Reject PS7-only syntax
-        # 위 파싱 검사는 shell 이 5.1 일 때만 유효하다. 이 검사는 버전과 무관하게 동작한다.
-        shell: powershell
-        run: |
-          $failed = $false
-          $ps7Kinds = @('QuestionQuestion','QuestionQuestionEquals','AndAnd','OrOr','QuestionDot','QuestionLBracket')
-          foreach ($f in Get-ChildItem -Path . -Recurse -File -Force -Filter *.ps1) {
-            $tokens = $null
-            [void][System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$tokens, [ref]$null)
-            foreach ($t in $tokens) {
-              if ($ps7Kinds -contains "$($t.Kind)") {
-                $failed = $true
-                Write-Host "::error file=$($f.FullName),line=$($t.Extent.StartLineNumber)::'$($t.Text)' 는 PowerShell 7 전용입니다."
-              }
-            }
-          }
-          if ($failed) { exit 1 }
+        # ⛔ 검사 로직을 여기 인라인으로 되돌리지 마라. Actions 는 이 스텝을 BOM 없는 UTF-8
+        #    임시 파일로 쓰는데 5.1 은 그것을 ANSI 로 읽어 한글이 깨지고 따옴표 짝이 무너진다
+        #    ("The string is missing the terminator"). 스크립트 파일은 BOM 을 달아 커밋한다.
+        run: .\.github\scripts\check-ps1-syntax.ps1
 
   frontend:
     runs-on: ubuntu-latest
