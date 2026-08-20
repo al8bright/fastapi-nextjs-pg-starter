@@ -89,6 +89,13 @@ function Enable-Psql {
   }
 }
 
+# 런타임 핀 로드 — ⚠️ 반드시 Enable-VersionManagers 보다 먼저 읽어야 한다.
+# pyenv 는 "shim 이 PATH 에 있다"와 "어떤 버전을 쓴다"가 별개라, 활성화 시점에 핀 값이 필요하다.
+$_pyPinFile   = Join-Path $SkeletonDir '.python-version'
+$_pyPin       = if (Test-Path $_pyPinFile) { "$(Get-Content $_pyPinFile -TotalCount 1)".Trim() } else { "" }
+$_nodePinFile = Join-Path $SkeletonDir '.nvmrc'
+$_nodePin     = if (Test-Path $_nodePinFile) { "$(Get-Content $_nodePinFile -TotalCount 1)".Trim() -replace '^v', '' } else { "" }
+
 # pyenv-win / fnm 활성화 (설치돼 있으면 현재 세션에 적용)
 function Enable-VersionManagers {
   $pyenvRoot = "$env:USERPROFILE\.pyenv\pyenv-win"
@@ -99,6 +106,20 @@ function Enable-VersionManagers {
     # PATH 선두에 추가 — 기존 항목은 위치(끝 항목 포함)와 무관하게 제거해 재실행 시 중복 누적 방지
     $rest = ($env:Path -split ';' | Where-Object { $_ -and $_ -ne "$pyenvRoot\bin" -and $_ -ne "$pyenvRoot\shims" }) -join ';'
     $env:Path = "$pyenvRoot\bin;$pyenvRoot\shims;" + $rest
+    # ⛔ PATH 에 shim 을 올리는 것과 "어떤 버전을 쓸지" 는 별개다. 전역 버전이 핀보다 낮으면
+    #    bootstrap 이 핀을 설치·재사용한 뒤에도 python 이 옛 버전을 가리켜 검증 단계에서 실패한다.
+    #    ⚠️ 설치돼 있지 않은 버전을 지정하면 모든 shim 호출이 깨지므로 반드시 설치 여부를 확인한다.
+    $_installedNow = @($(try { pyenv versions --bare 2>&1 | Out-String } catch { "" }) -split '\r?\n' |
+      ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if ($_pyPin -and ($_installedNow -contains $_pyPin)) {
+      $env:PYENV_VERSION = $_pyPin
+    } else {
+      # 핀이 설치돼 있지 않으면 하한을 충족하는 설치본 중 가장 높은 것을 고른다 (옛 전역 버전 폴백 방지)
+      $_minPy = if ($_min['MIN_PYTHON']) { $_min['MIN_PYTHON'] } else { '3.13' }
+      $_cand = $_installedNow | Where-Object { $_ -match '^\d+\.\d+\.\d+$' -and $_.StartsWith("$_minPy.") } |
+        Sort-Object { [version]$_ } | Select-Object -Last 1
+      if ($_cand) { $env:PYENV_VERSION = $_cand }
+    }
   }
   if (Get-Command fnm -ErrorAction SilentlyContinue) {
     # PS 5.1 은 EAP=Stop 아래에서 네이티브 stderr 한 줄을 NativeCommandError 로 종료 예외화한다
@@ -110,11 +131,13 @@ function Enable-VersionManagers {
       $_fnmEnv = fnm env --use-on-cd 2>&1
       if ($LASTEXITCODE -eq 0) { $_fnmEnv | Out-String | Invoke-Expression }
     } catch {}
-    # 템플릿 루트에는 .nvmrc 가 없으므로 최소 Node 버전을 명시해 활성화
+    # .nvmrc 핀을 우선 존중하고, 실패하면 최소 Node 버전으로 활성화한다
+    # (템플릿 루트에는 .nvmrc 가 없으므로 cd 훅만으로는 활성화되지 않는다)
     $_nodeDefault = if ($_min['MIN_NODE']) { $_min['MIN_NODE'] } else { '24' }
+    $_nodeWanted  = if ($_nodePin) { $_nodePin } else { $_nodeDefault }
     try {
-      fnm use $_nodeDefault 2>&1 | Out-Null
-      if ($LASTEXITCODE -ne 0) { return }
+      fnm use $_nodeWanted 2>&1 | Out-Null
+      if ($LASTEXITCODE -ne 0) { fnm use $_nodeDefault 2>&1 | Out-Null }
     } catch {}
   }
 }
@@ -149,8 +172,7 @@ if (-not (_Meets $_pnpmHave $_minPnpm)) { $_needBootstrap = $true }
 #  - pyenv 가 있으면: 핀된 정확한 버전이 실제 설치돼 있어야 한다(없으면 bootstrap 이 설치).
 #  - pyenv 가 없으면: 핀을 강제할 수단이 없다. 하한을 충족하는 Python 을 그대로 쓰되,
 #    CI 는 .python-version 을 읽으므로 버전이 다르면 경고만 남긴다.
-$_pyPinFile = Join-Path $SkeletonDir '.python-version'
-$_pyPin = if (Test-Path $_pyPinFile) { "$(Get-Content $_pyPinFile -TotalCount 1)".Trim() } else { "" }
+# ($_pyPin 로드는 위 활성화 블록보다 앞에서 이미 끝났다)
 if ($_pyPin) {
   if (Get-Command pyenv -ErrorAction SilentlyContinue) {
     if (-not $_needBootstrap) {
@@ -176,6 +198,11 @@ if ($_needBootstrap) {
     Write-Warn2 "필수 도구 또는 Python·Node·pnpm 버전이 기준 미달 — bootstrap.ps1 을 먼저 실행합니다 …"
     $_PinDir = Join-Path ([System.IO.Path]::GetTempPath()) ("scaffold-pin-" + [guid]::NewGuid().ToString("N").Substring(0,8))
     New-Item -ItemType Directory -Force -Path $_PinDir | Out-Null
+    # 골격의 핀을 미리 심어 bootstrap 이 "기존 .python-version 핀 존중" 경로를 타게 한다.
+    # ⛔ 빈 폴더를 넘기면 bootstrap 이 핀을 못 읽고 임의의 최신 패치를 골라, 생성 프로젝트의
+    #    런타임 버전이 "스캐폴드를 돌린 날"에 따라 달라진다(재현 불가).
+    if (Test-Path $_pyPinFile)   { Copy-Item $_pyPinFile   (Join-Path $_PinDir '.python-version') -Force }
+    if (Test-Path $_nodePinFile) { Copy-Item $_nodePinFile (Join-Path $_PinDir '.nvmrc') -Force }
     # PS 5.1 은 스크립트/네이티브 명령 실패를 자동 예외화하지 않고, in-process 호출의
     # $LASTEXITCODE 는 내부 마지막 네이티브 명령의 잔존값이라 신뢰할 수 없다.
     # → 예외 포착 + bootstrap 결과(실제 런타임 버전) 검증으로 실패를 감지한다 (scaffold.sh 와 동일하게 실패 시 중단).
@@ -186,17 +213,18 @@ if ($_needBootstrap) {
       Write-Warn2 "bootstrap.ps1 실행 중 오류: $($_.Exception.Message)"
       $_bootstrapOk = $false
     }
-    Enable-VersionManagers
-    if ($_bootstrapOk -and (Get-Command fnm -ErrorAction SilentlyContinue)) {
-      $_nodeVer = if ($_min['MIN_NODE']) { $_min['MIN_NODE'] } else { '24' }
-      try {
-        fnm use $_nodeVer 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "종료 코드 $LASTEXITCODE" }
-      } catch {
-        Write-Warn2 "bootstrap 후 Node $_nodeVer 활성화 실패: $($_.Exception.Message)"
-        $_bootstrapOk = $false
-      }
+    # bootstrap 이 실제로 고정한 버전을 핀으로 재채택한 뒤 활성화한다.
+    # (핀이 pyenv 에 없어 bootstrap 이 다른 패치로 폴백했을 수 있다)
+    if (Test-Path (Join-Path $_PinDir '.python-version')) {
+      $_pyPin = "$(Get-Content (Join-Path $_PinDir '.python-version') -TotalCount 1)".Trim()
     }
+    if (Test-Path (Join-Path $_PinDir '.nvmrc')) {
+      $_nodePin = "$(Get-Content (Join-Path $_PinDir '.nvmrc') -TotalCount 1)".Trim() -replace '^v', ''
+    }
+    # fnm use 는 이 함수 안에서 핀 기준으로 수행된다.
+    # ⛔ 활성화 실패를 곧바로 중단 사유로 삼지 않는다 — 관리자 없이 기존 설치본을 재사용하는
+    #    정상 경로까지 막아버린다(scaffold.sh 와 동일). 판정은 아래 런타임 재검증이 한다.
+    Enable-VersionManagers
     $_pyAfter = _Get-SemVer $(try { python --version 2>&1 | Out-String } catch { "" })
     if ($_bootstrapOk -and -not (_Meets $_pyAfter $_minPython)) {
       Write-Warn2 "bootstrap 후에도 Python 이 $_minPython 이상이 아닙니다."
@@ -304,6 +332,13 @@ if (-not $Target) {
 
 $snake = ($Name -creplace '([a-z0-9])([A-Z])', '$1_$2') -replace '[^A-Za-z0-9]+', '_'
 $snake = $snake.Trim('_').ToLower()
+# ⛔ ASCII 영숫자가 하나도 없으면(예: -Name "내앱") $snake 가 빈 문자열이 된다.
+#    그대로 두면 DATABASE_URL 에 DB 이름이 없고, 쿠키가 "_session", npm 이름이 "-frontend" 가 된다.
+if (-not $snake) {
+  Write-Warn2 "프로젝트 이름에서 식별자를 만들 수 없습니다: $Name"
+  Write-Host "        ASCII 영문자·숫자를 1자 이상 포함하세요 (DB 이름·npm 패키지명·쿠키명에 쓰입니다)." -ForegroundColor Yellow
+  exit 1
+}
 if (-not $DbName) { $DbName = $snake }
 # 상대 경로는 .NET 프로세스 디렉토리가 아니라 현재 PowerShell 위치 기준으로 해석한다.
 # (PS 5.1 호환: 2-인자 GetFullPath 오버로드가 없으므로 직접 결합 후 정규화)
@@ -416,11 +451,24 @@ $databaseUrl = "postgresql+psycopg2://${DbUser}:$([uri]::EscapeDataString("$DbPa
 $_rngBytes = New-Object byte[] 24
 [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($_rngBytes)
 $secret = ([System.BitConverter]::ToString($_rngBytes) -replace '-', '').ToLower()
+# 초기 관리자 비밀번호도 무작위로 생성한다.
+# ⛔ 하드코딩된 기본값(admin123)을 쓰면 이 템플릿으로 만든 모든 프로젝트가 같은 자격증명을 갖는다.
+$_pwBytes = New-Object byte[] 12
+[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($_pwBytes)
+$seedAdminPw = [Convert]::ToBase64String($_pwBytes) -replace '[/+=]', ''
 
 # ---------- 2. 골격 복사 ----------
 Write-Step "골격 복사 → $Target"
 if ((Test-Path $Target) -and (Get-ChildItem -Path $Target -Force -ErrorAction SilentlyContinue | Select-Object -First 1)) {
   Write-Warn2 "대상 디렉토리가 비어있지 않습니다 — 기존 파일 위에 골격을 덮어씁니다: $Target"
+  # ⛔ 재실행은 파괴적이다. 대화형이면 확인을 받고, 비대화형(CI·스크립트)이면 중단한다.
+  if (Test-Interactive) {
+    $_ans = Read-Host "  계속할까요? 기존 파일을 덮어씁니다 (y/N)"
+    if ($_ans -notmatch '^[Yy]') { Write-Host "중단합니다."; exit 1 }
+  } else {
+    Write-Warn2 "비대화형 실행이므로 중단합니다. 덮어쓰려면 대상 디렉터리를 비우거나 대화형으로 실행하세요."
+    exit 1
+  }
 }
 New-Item -ItemType Directory -Force -Path $Target | Out-Null
 # 닷파일(.gitignore·.python-version·.nvmrc·.github·.claude 등) 포함 전체 복사 —
@@ -462,8 +510,33 @@ CORS_ORIGINS=http://localhost:3000
 FRONTEND_URL=http://localhost:3000
 BACKEND_PUBLIC_URL=http://localhost:8000
 TZ=Asia/Seoul
+APP_ENV=development
+# 초기 관리자 시드 — 코드 기본값은 꺼져 있고(backend/app/config.py) 개발 편의를 위해 여기서만 켠다.
+# ⛔ 배포 전 SEED_DEFAULT_ADMIN=false 로 끄고 APP_ENV=production 으로 바꾼다.
+SEED_DEFAULT_ADMIN=true
+DEFAULT_ADMIN_PASSWORD=$seedAdminPw
 "@
-[System.IO.File]::WriteAllText((Join-Path $Target 'backend\.env'), $backendEnv, $Enc)
+# ⛔ .env 는 DB 비밀번호와 JWT 서명키를 담는다. 상속 ACL 을 끊고 현재 사용자에게만 허용한다
+#    (scaffold.sh 의 chmod 600 대응).
+$_backendEnvPath = Join-Path $Target 'backend\.env'
+# ⛔ 기존 .env 를 덮어쓰면 SECRET_KEY 가 재발급되어 발급된 JWT 가 전부 무효가 된다. 백업을 남긴다.
+if (Test-Path $_backendEnvPath) {
+  $_envBak = "$_backendEnvPath.bak." + (Get-Date -Format 'yyyyMMddHHmmss')
+  Copy-Item $_backendEnvPath $_envBak -Force
+  Write-Warn2 "기존 backend\.env 를 백업했습니다: $(Split-Path $_envBak -Leaf)"
+}
+[System.IO.File]::WriteAllText($_backendEnvPath, $backendEnv, $Enc)
+try {
+  $_acl = Get-Acl $_backendEnvPath
+  $_acl.SetAccessRuleProtection($true, $false)
+  # 열거 중 컬렉션을 수정하지 않도록 스냅샷(@())을 뜬 뒤 제거한다
+  @($_acl.Access) | ForEach-Object { [void]$_acl.RemoveAccessRule($_) }
+  [void]$_acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+    [System.Security.Principal.WindowsIdentity]::GetCurrent().Name, 'FullControl', 'Allow')))
+  Set-Acl -Path $_backendEnvPath -AclObject $_acl
+} catch {
+  Write-Warn2 "backend\.env 권한 설정 실패 — 파일 접근 권한을 직접 제한하세요: $($_.Exception.Message)"
+}
 $frontendEnv = "FASTAPI_URL=http://localhost:8000`n"
 [System.IO.File]::WriteAllText((Join-Path $Target 'frontend\.env'), $frontendEnv, $Enc)
 Write-Ok "backend\.env, frontend\.env 생성 (DATABASE_URL, SECRET_KEY 주입)"
@@ -613,6 +686,11 @@ Write-Host @"
   cd "$frontend"
   pnpm dev              # 개발 서버
   pnpm typecheck        # 타입 검사 (tsc --noEmit)
+
+[로그인]  초기 관리자 계정 (backend\.env 의 DEFAULT_ADMIN_PASSWORD):
+  아이디: admin
+  비밀번호: $seedAdminPw
+  ⛔ 배포 전 이 계정의 비밀번호를 바꾸고 SEED_DEFAULT_ADMIN=false, APP_ENV=production 으로 설정하세요.
 
 [확인]    브라우저: http://localhost:3000
           → '백엔드 API'와 '데이터베이스'가 모두 '정상'이면 성공입니다.

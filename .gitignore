@@ -2,7 +2,7 @@
 # (생성된 프로젝트가 받는 무시 목록은 skeleton/.gitignore 다.)
 
 # 로컬 도구 설정 — 자격증명이 들어갈 수 있으므로 커밋 금지
-.claude/settings.local.json
+**/.claude/settings.local.json
 
 # 환경설정
 .env
@@ -14,3 +14,10 @@
 Thumbs.db
 .vscode/
 .idea/
+
+# === 루트에서 스모크 테스트를 돌릴 때 생기는 산출물 ===
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.next/

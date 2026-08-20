@@ -71,5 +71,35 @@ describe("safeRedirect", () => {
     expect(safeRedirect("/login#top")).toBe(DEFAULT_REDIRECT)
     // 다른 경로의 접두사로 /login 이 들어간 것은 정상 경로다.
     expect(safeRedirect("/login-history")).toBe("/login-history")
+    // 트레일링 슬래시·하위 경로도 로그인 화면이다 (문자열 비교만 하면 여기서 샌다).
+    expect(safeRedirect("/login/")).toBe(DEFAULT_REDIRECT)
+    expect(safeRedirect("/login/?next=/my")).toBe(DEFAULT_REDIRECT)
+  })
+
+  // ⚠️ 여기가 문자열 검사만으로는 못 막는 지점이다.
+  // 아래 입력들은 전부 `/` 로 시작하고 두 번째 문자도 `/`·`\` 가 아니라 앞선 검사를 통과하지만,
+  // `..` 세그먼트가 정규화되면 `//evil.com` — 즉 스킴 상대 URL — 이 된다.
+  it("dot-segment 로 스킴 상대 URL 을 되살리는 우회를 거부한다", () => {
+    expect(safeRedirect("/..//evil.com")).toBe(DEFAULT_REDIRECT)
+    expect(safeRedirect("/login/../..//evil.com")).toBe(DEFAULT_REDIRECT)
+    expect(safeRedirect("/a/../..//evil.com")).toBe(DEFAULT_REDIRECT)
+    expect(safeRedirect("/a/b/../../..//evil.com")).toBe(DEFAULT_REDIRECT)
+    expect(safeRedirect("///evil.com")).toBe(DEFAULT_REDIRECT)
+  })
+
+  it("인코딩된 슬래시를 거부한다 (프록시가 디코드하면 //host 가 된다)", () => {
+    expect(safeRedirect("/%2f%2fevil.com")).toBe(DEFAULT_REDIRECT)
+    expect(safeRedirect("/%2F%2Fevil.com")).toBe(DEFAULT_REDIRECT)
+    expect(safeRedirect("/%5c%5cevil.com")).toBe(DEFAULT_REDIRECT)
+    // 쿼리스트링 안의 인코딩된 슬래시는 정상이다 (경로가 아니므로 과잉 차단하지 않는다).
+    expect(safeRedirect("/my?redirect=%2Fhome")).toBe("/my?redirect=%2Fhome")
+  })
+
+  it("정규화된 경로를 돌려준다 (호출부까지 불변식을 이어준다)", () => {
+    // `..` 가 내부에 머무는 경우는 정상이지만, 접힌 형태로 돌려줘야 뒤에서 다시 해석되지 않는다.
+    expect(safeRedirect("/a/b/../c")).toBe("/a/c")
+    expect(safeRedirect("/a/./b")).toBe("/a/b")
+    // 상위로 넘치면 루트에서 멈춘다 (브라우저 파서와 동일).
+    expect(safeRedirect("/../my")).toBe("/my")
   })
 })

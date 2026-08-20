@@ -17,9 +17,32 @@ import "server-only"
 
 const API_PREFIX = "/api/v1"
 
+/**
+ * 백엔드 응답 대기 상한(ms). 연결 **거부**는 즉시 실패하지만, 연결된 뒤 응답하지 않는 백엔드
+ * (DB 락·스레드풀 고갈·방화벽 DROP)는 undici 기본값까지 SSR 렌더를 붙잡는다.
+ * getSessionUser 가 모든 보호 페이지 렌더 경로에 있으므로, 백엔드 하나가 느려지면
+ * Next 워커가 전부 묶인다.
+ */
+const DEFAULT_TIMEOUT_MS = 10_000
+
 /** FastAPI 베이스 URL. 서버 전용 환경변수 — NEXT_PUBLIC_ 을 붙이면 안 된다. */
 function baseUrl(): string {
-  return (process.env.FASTAPI_URL ?? "http://localhost:8000").replace(/\/+$/, "")
+  const raw = process.env.FASTAPI_URL
+  if (!raw) {
+    // ⛔ 프로덕션에서 조용히 localhost 로 폴백하면 서버는 정상 기동하고 모든 SSR 호출만
+    //    실패해, 화면에는 "백엔드가 실행 중인지 확인하세요" 만 뜬다. 원인 추적이 가장 오래 걸리는
+    //    실패 유형이므로 여기서 즉시 깨뜨린다.
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("FASTAPI_URL 이 설정되지 않았습니다 (frontend/.env 를 확인하세요).")
+    }
+    return "http://localhost:8000"
+  }
+  return raw.replace(/\/+$/, "")
+}
+
+function timeoutMs(): number {
+  const raw = Number(process.env.FASTAPI_TIMEOUT_MS)
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_TIMEOUT_MS
 }
 
 /** 실패 원인 분류 — 화면이 "인증 실패"와 "백엔드 미기동"을 구분할 수 있어야 한다. */
@@ -102,6 +125,8 @@ export async function fastapiFetch<T>({
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
       cache: "no-store",
+      // 타임아웃도 AbortError 로 여기 catch 에 걸려 "network" 로 정규화된다 — 화면 문구를 그대로 쓴다.
+      signal: AbortSignal.timeout(timeoutMs()),
     })
   } catch {
     throw new FastapiError("network", 0, null)
@@ -111,7 +136,15 @@ export async function fastapiFetch<T>({
     throw new FastapiError(kindFor(response.status), response.status, await readDetail(response))
   }
 
-  return (await response.json()) as T
+  // 204/205 는 본문이 없다. 또 리버스 프록시가 200 으로 HTML 오류 페이지를 끼워 넣으면
+  // json() 이 SyntaxError 를 던지는데, 그대로 두면 FastapiError 가 아닌 예외가 새어 나가
+  // 호출부의 원인 분류가 무너진다.
+  if (response.status === 204 || response.status === 205) return undefined as T
+  try {
+    return (await response.json()) as T
+  } catch {
+    throw new FastapiError("server", response.status, null)
+  }
 }
 
 /**

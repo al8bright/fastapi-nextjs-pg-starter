@@ -58,7 +58,7 @@ gh pr create --fill --base main
 gh pr merge --squash --delete-branch
 ```
 
-- `gh`가 없으면: `winget install GitHub.cli` 후 `gh auth login`.
+- `gh`가 없으면: `brew install gh`(macOS) 또는 `winget install GitHub.cli`(Windows) 후 `gh auth login`.
 - 원격(remote)이 아직 없으면 먼저 연결한다(`git remote add origin <url>`).
 
 ## 협업자가 생기면

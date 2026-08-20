@@ -5,6 +5,51 @@
 
 ---
 
+## 2026-08-20 (2) — 실행 검증 및 보안 수정
+
+템플릿을 실제로 스캐폴드해 PostgreSQL 18 + SSR 프로덕션 모드로 끝까지 돌려보고, 재현된 결함을 고쳤다.
+
+### Fixed (수정)
+
+- **스캐폴드가 pyenv 환경에서 항상 실패하던 문제** — `pyenv init` 은 shim 을 PATH 에 올릴 뿐 버전을
+  선택하지 않는다. `pyenv global` 이 `system` 이면 bootstrap 이 3.13 을 확보한 뒤에도 검증 단계에서
+  중단됐다. 핀 로드를 활성화보다 앞으로 옮기고 `PYENV_VERSION` 을 (설치 여부를 확인해) 지정하며,
+  bootstrap 에 넘기는 임시 폴더에 골격의 `.python-version`·`.nvmrc` 를 미리 심어 핀이 존중되게 했다.
+  `scaffold.ps1` 도 동일하게 고쳤다.
+- **만료·무효 토큰에서 사이트 전체가 잠기던 무한 리다이렉트** — 로그인 화면이 쿠키의 *존재*만 보고
+  보호 경로로 되돌려 보내 `ERR_TOO_MANY_REDIRECTS` 가 났다(`SECRET_KEY` 교체 시 전 사용자 동시 발생).
+  `hasValidSession()` 을 추가해 로그인 화면이 토큰 *유효성*으로 판단하게 했다.
+- **기본 자격증명이 모든 프로젝트에 공유되던 문제** — `seed_default_admin` 기본값을 `false`,
+  `default_admin_password` 기본값을 제거하고 `APP_ENV` 를 추가했다. `APP_ENV=production` 에서
+  기본 `SECRET_KEY` 이거나 시드가 켜져 있으면 경고가 아니라 **기동을 거부**한다. 스캐폴드는
+  관리자 비밀번호를 프로젝트마다 무작위 생성해 `.env`(권한 600)에 넣고 완료 안내에 출력한다.
+- **`/landing` 인증 우회** — middleware 는 쿠키의 존재만 보므로 임의 문자열 쿠키로 통과됐다.
+  페이지에서 `getSessionUser()` 로 실검증한다.
+- **오픈 리다이렉트 (dot-segment·인코딩 우회)** — `/..//evil.com` 이 정규화되면 `//evil.com` 이 되어
+  검증기가 선언한 불변식이 깨졌다. WHATWG URL 로 정규화한 뒤 다시 검사하고 정규화된 경로를 반환한다.
+- **middleware matcher 가 보호 경로를 흘리던 문제** — `login` 이 앵커되지 않아 `/login-history` 가,
+  "확장자처럼 생긴 모든 것"을 제외해 `/users/john.doe` 가 가드 밖이었다. 앵커를 붙이고 정적 자산
+  확장자만 열거한다.
+- **`pnpm-lock.yaml` 부재** — pnpm 11 은 CI 에서 `frozen-lockfile` 이 기본이라 설치가 실패했다. 커밋했다.
+- **프로젝트 이름에 ASCII 영숫자가 없으면 조용히 깨진 프로젝트가 생성되던 문제** — DB 이름이 비고
+  쿠키가 `_session` 이 되는데도 종료 코드가 0 이었다. 이제 중단한다(sh·ps1 공통).
+- `skeleton/scripts/bootstrap.sh` 실행 비트 누락(생성 프로젝트에서 `permission denied`).
+
+### Changed (변경)
+
+- **SSR fetch 에 타임아웃 추가** — 응답하지 않는 백엔드가 Next 워커를 붙잡지 않도록
+  `AbortSignal.timeout`(기본 10s, `FASTAPI_TIMEOUT_MS`)을 걸고, 비-JSON 응답도 `FastapiError` 로 정규화한다.
+- **프로덕션에서 `FASTAPI_URL` 미설정 시 fail-fast** — 조용히 localhost 로 폴백하지 않는다.
+- **`SESSION_COOKIE` 를 `lib/session-cookie.ts` 로 분리** — middleware(Edge)가 `server-only`·
+  `next/headers` 를 번들로 끌어오지 않게 했다.
+- **스캐폴드 재실행 안전성** — 비어있지 않은 대상은 확인을 받고(비대화형이면 중단), 기존
+  `backend/.env` 는 덮어쓰기 전에 백업한다.
+- **로그인 화면에서 비밀번호 표시 제거** — 개발 환경에서만 `backend/.env` 위치를 안내한다.
+- **CI 강화** — `permissions: contents: read`, `concurrency`, `timeout-minutes`, 액션 버전 상향
+  (checkout@v5 / setup-python@v6 / setup-node@v5), 템플릿 CI 의 생성물 검증에 `typecheck` 추가.
+- **문서·스킬을 구현과 재동기화** — matcher 정규식, 시드 기본값, 프론트 버전 고정 방식,
+  `SECRET_KEY` 기본값 문구, PowerShell 전용이던 스킬 명령에 macOS/Linux 병기.
+
 ## 2026-08-20
 
 `fastapi-react-pg-starter` 로부터 프론트엔드를 **Next.js** 로 이식해 신규 저장소로 분기.
@@ -34,7 +79,7 @@
 - **백엔드 패키지와 런타임 기준** — `requirements.txt` 정확 핀과 Python ≥ 3.13, Node.js ≥ 24, pnpm ≥ 11 최소 기준 유지.
 - **스캐폴드 동작** — Windows PowerShell과 macOS/Linux bash 양쪽에서 런타임 검사·bootstrap·실패 시 복사 전 중단·DB 생성·Alembic 적용·의존성 설치를 자동화하는 흐름 유지.
 - **프로젝트 규칙** — DB 변경은 Alembic으로만 수행하고, 설정은 `.env`로 관리하며, KST 단일 기준과 TDD + Tidy First 원칙 유지.
-- **화면과 사용자 흐름** — 로그인, 메인, 상태, 내 정보 화면과 기본 관리자 `admin` / `admin123`, 로그인 후 원래 위치 복귀 동작 유지.
+- **화면과 사용자 흐름** — 로그인, 메인, 상태, 내 정보 화면과 기본 관리자 `admin`(비밀번호는 스캐폴드가 무작위 생성), 로그인 후 원래 위치 복귀 동작 유지.
 
 ### 작업 관례 (다음 세션 참고)
 

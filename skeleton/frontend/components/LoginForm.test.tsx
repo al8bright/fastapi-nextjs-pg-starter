@@ -24,7 +24,9 @@ describe("LoginForm", () => {
     expect(screen.getByText("계정으로 로그인하세요.")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "로그인" })).toBeEnabled()
     // 스타터의 기본 계정 안내는 유지한다.
-    expect(screen.getByText("admin / admin123")).toBeInTheDocument()
+    // ⛔ 자격증명(비밀번호)을 화면에 찍지 않는다 — 스캐폴드가 프로젝트마다 무작위로 만든다.
+    expect(screen.queryByText(/admin123/)).not.toBeInTheDocument()
+    expect(screen.getByText(/DEFAULT_ADMIN_PASSWORD/)).toBeInTheDocument()
   })
 
   it("입력값과 복귀 경로(next)를 FormData 로 Server Action 에 넘긴다", async () => {

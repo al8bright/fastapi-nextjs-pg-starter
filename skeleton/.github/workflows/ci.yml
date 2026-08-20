@@ -8,6 +8,16 @@ on:
   pull_request:
     branches: [main]
 
+# 최소 권한 — 미선언이면 리포/조직 설정에 따라 GITHUB_TOKEN 이 read-write 로 발급된다.
+# 이 워크플로는 체크아웃과 검증만 하므로 읽기면 충분하다.
+permissions:
+  contents: read
+
+# 같은 브랜치에 연속 push 하면 이전 실행을 취소해 러너 시간을 아낀다.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   backend:
     # 이 프로젝트는 Windows 와 macOS/Linux 에서 함께 개발한다.
@@ -17,12 +27,13 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version-file: .python-version
           cache: pip
@@ -42,6 +53,7 @@ jobs:
     # windows-latest 는 Linux 컨테이너를 띄우지 못하므로 DB 검증만 별도 ubuntu 잡으로 분리했다.
     # (backend 잡을 OS 매트릭스로 돌리면서 services 를 그대로 두면 Windows 잡이 시작조차 못 한다.)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: backend
@@ -60,8 +72,8 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version-file: .python-version
           cache: pip
@@ -82,54 +94,25 @@ jobs:
   # PS7 전용 문법(??, ?:, &&/||)이 하나라도 섞이면 5.1 은 한 줄도 실행하지 못하고 죽는다.
   powershell-syntax:
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - name: Parse all .ps1 with Windows PowerShell 5.1
+      - uses: actions/checkout@v5
+      - name: Check .ps1 syntax with Windows PowerShell 5.1
         shell: powershell # pwsh 가 아니라 5.1 이어야 의미가 있다
-        run: |
-          $failed = $false
-          $files = Get-ChildItem -Path . -Recurse -File -Force -Filter *.ps1
-          if (-not $files) { Write-Host "검사할 .ps1 없음"; exit 0 }
-          foreach ($f in $files) {
-            $errors = $null
-            [void][System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$errors)
-            if ($errors.Count -gt 0) {
-              $failed = $true
-              Write-Host "::error file=$($f.FullName)::구문 오류 $($errors.Count)건"
-              foreach ($e in $errors) {
-                Write-Host ("  L{0}:{1} {2}" -f $e.Extent.StartLineNumber, $e.Extent.StartColumnNumber, $e.Message)
-              }
-            } else {
-              Write-Host "OK  $($f.FullName)"
-            }
-          }
-          if ($failed) { exit 1 }
-      - name: Reject PS7-only syntax
-        # 위 파싱 검사는 shell 이 5.1 일 때만 유효하다. 이 검사는 버전과 무관하게 동작한다.
-        shell: powershell
-        run: |
-          $failed = $false
-          $ps7Kinds = @('QuestionQuestion','QuestionQuestionEquals','AndAnd','OrOr','QuestionDot','QuestionLBracket')
-          foreach ($f in Get-ChildItem -Path . -Recurse -File -Force -Filter *.ps1) {
-            $tokens = $null
-            [void][System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$tokens, [ref]$null)
-            foreach ($t in $tokens) {
-              if ($ps7Kinds -contains "$($t.Kind)") {
-                $failed = $true
-                Write-Host "::error file=$($f.FullName),line=$($t.Extent.StartLineNumber)::'$($t.Text)' 는 PowerShell 7 전용입니다."
-              }
-            }
-          }
-          if ($failed) { exit 1 }
+        # ⛔ 검사 로직을 여기 인라인으로 되돌리지 마라. Actions 는 이 스텝을 BOM 없는 UTF-8
+        #    임시 파일로 쓰는데 5.1 은 그것을 ANSI 로 읽어 한글이 깨지고 따옴표 짝이 무너진다
+        #    ("The string is missing the terminator"). 스크립트 파일은 BOM 을 달아 커밋한다.
+        run: .\.github\scripts\check-ps1-syntax.ps1
 
   frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
       - name: Enable pnpm (corepack)

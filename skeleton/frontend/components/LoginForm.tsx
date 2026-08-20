@@ -71,9 +71,15 @@ export default function LoginForm({ next }: { next: string }) {
         {isPending ? "로그인 중…" : "로그인"}
       </button>
 
-      <p className="mt-4 text-center text-xs text-on-surface-variant">
-        기본 관리자 계정: <code className="font-mono">admin / admin123</code>
-      </p>
+      {/* 개발 편의 안내 — 비밀번호는 스캐폴드가 프로젝트마다 무작위로 생성한다.
+          ⛔ 자격증명 자체를 화면에 찍지 않는다. 프로덕션 번들에서는 이 블록이 통째로 빠진다. */}
+      {process.env.NODE_ENV !== "production" && (
+        <p className="mt-4 text-center text-xs text-on-surface-variant">
+          개발용 관리자 계정: <code className="font-mono">admin</code> · 비밀번호는{" "}
+          <code className="font-mono">backend/.env</code> 의{" "}
+          <code className="font-mono">DEFAULT_ADMIN_PASSWORD</code> 참고
+        </p>
+      )}
     </form>
   )
 }

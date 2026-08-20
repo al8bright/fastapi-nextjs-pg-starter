@@ -10,74 +10,40 @@ on:
   pull_request:
     branches: [main]
 
+# 최소 권한 — 미선언이면 리포/조직 설정에 따라 GITHUB_TOKEN 이 read-write 로 발급된다.
+# 이 워크플로는 체크아웃과 검증만 하므로 읽기면 충분하다.
+permissions:
+  contents: read
+
+# 같은 브랜치에 연속 push 하면 이전 실행을 취소해 러너 시간을 아낀다.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # ── 1. PowerShell 구문 검사 (가장 중요) ──────────────────────────────────
   # scaffold.ps1 은 #requires -Version 5.1 을 선언한다. Windows 기본 셸이 5.1 이므로
   # PS7 전용 문법(??, ?:, &&/||)이 하나라도 있으면 파싱 단계에서 통째로 죽는다.
   powershell-syntax:
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - name: Parse .ps1 with Windows PowerShell 5.1
+      - uses: actions/checkout@v5
+      - name: Check .ps1 syntax with Windows PowerShell 5.1
         shell: powershell # pwsh 로 바꾸면 PS7 전용 문법을 놓친다
-        run: |
-          $failed = $false
-          $files = Get-ChildItem -Path . -Recurse -File -Force -Filter *.ps1
-          if (-not $files) { Write-Host "검사할 .ps1 없음"; exit 0 }
-          foreach ($f in $files) {
-            $errors = $null
-            [void][System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$errors)
-            if ($errors.Count -gt 0) {
-              $failed = $true
-              Write-Host "::error file=$($f.FullName)::구문 오류 $($errors.Count)건"
-              foreach ($e in $errors) {
-                Write-Host ("  L{0}:{1} {2}" -f $e.Extent.StartLineNumber, $e.Extent.StartColumnNumber, $e.Message)
-              }
-            } else {
-              Write-Host "OK  $($f.FullName)"
-            }
-          }
-          if ($failed) { exit 1 }
-
-      # 파싱만으로는 (try {...} catch {...}) 같은 "파싱은 되지만 실행 시 죽는" 구문을 못 잡는다.
-      # try/if/foreach 를 인자 위치(괄호 안)에 쓴 곳을 AST 로 직접 찾는다.
-      # PS7 전용 토큰도 함께 스캔한다 — 위 파싱 검사는 shell 이 5.1 일 때만 유효하므로
-      # 누군가 shell 을 pwsh 로 바꿔도 이 검사는 계속 동작한다.
-      - name: Reject PS7-only syntax and statements used as arguments
-        shell: powershell
-        run: |
-          $failed = $false
-          $ps7Kinds = @('QuestionQuestion','QuestionQuestionEquals','AndAnd','OrOr','QuestionDot','QuestionLBracket')
-          foreach ($f in Get-ChildItem -Path . -Recurse -File -Force -Filter *.ps1) {
-            $tokens = $null
-            $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$tokens, [ref]$null)
-            foreach ($t in $tokens) {
-              if ($ps7Kinds -contains "$($t.Kind)") {
-                $failed = $true
-                Write-Host "::error file=$($f.FullName),line=$($t.Extent.StartLineNumber)::'$($t.Text)' 는 PowerShell 7 전용입니다. Windows PowerShell 5.1 은 파싱 단계에서 실패합니다."
-              }
-            }
-            $bad = $ast.FindAll({
-              param($n)
-              $n -is [System.Management.Automation.Language.StringConstantExpressionAst] -and
-              $n.StringConstantType -eq 'BareWord' -and
-              $n.Value -in @('try', 'if', 'foreach', 'while', 'switch') -and
-              $n.Parent -is [System.Management.Automation.Language.CommandAst]
-            }, $true)
-            foreach ($b in $bad) {
-              $failed = $true
-              Write-Host "::error file=$($f.FullName),line=$($b.Extent.StartLineNumber)::'$($b.Value)' 문을 인자 자리에 사용했습니다. 명령어로 해석되어 실행 시 실패합니다."
-            }
-          }
-          if ($failed) { exit 1 }
+        # ⛔ 검사 로직을 여기 인라인으로 되돌리지 마라. Actions 는 이 스텝을 BOM 없는 UTF-8
+        #    임시 파일로 쓰는데 5.1 은 그것을 ANSI 로 읽어 한글이 깨지고 따옴표 짝이 무너진다
+        #    ("The string is missing the terminator"). 스크립트 파일은 BOM 을 달아 커밋한다.
+        run: .\.github\scripts\check-ps1-syntax.ps1
 
   # ── 2. bash 구문 검사 ────────────────────────────────────────────────────
   # scaffold.sh / bootstrap.sh 는 파싱 오류만으로도 사용자 환경에서 즉사한다.
   # 실행 없이 파싱만 하는 `bash -n` 으로 전체 .sh 를 훑는다.
   bash-syntax:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: bash -n (모든 .sh)
         run: |
           failed=0
@@ -101,12 +67,13 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version-file: skeleton/.python-version
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version-file: skeleton/.nvmrc
       - name: Enable pnpm (corepack)
@@ -140,10 +107,11 @@ jobs:
           ruff check .
           pytest -q
 
-      - name: 생성물 프론트 검증 (install + lint + test + build)
+      - name: 생성물 프론트 검증 (install + lint + typecheck + test + build)
         working-directory: ${{ runner.temp }}/CiDemo/frontend
         run: |
           pnpm install
           pnpm lint
+          pnpm typecheck
           pnpm test
           pnpm build

@@ -104,10 +104,10 @@ flowchart LR
 
 ## 인증과 기본 계정
 
-이 프로젝트는 username/password 로그인을 기본 제공한다. FastAPI가 발급한 JWT는 Next가 httpOnly 쿠키에 저장하고, 이후 FastAPI 서버 요청에 Bearer 토큰으로 전달한다. 처음 백엔드를 실행할 때 `admin` 계정이 없으면 개발용 관리자 **`admin` / `admin123`** 이 시드된다.
+이 프로젝트는 username/password 로그인을 기본 제공한다. FastAPI가 발급한 JWT는 Next가 httpOnly 쿠키에 저장하고, 이후 FastAPI 서버 요청에 Bearer 토큰으로 전달한다. 처음 백엔드를 실행할 때 `admin` 계정이 없으면 개발용 관리자 **`admin`** 이 시드된다. 비밀번호는 스캐폴드가 무작위로 생성해 `backend/.env` 의 `DEFAULT_ADMIN_PASSWORD` 에 넣는다.
 
 > [!CAUTION]
-> **`admin` / `admin123`은 로컬 개발 전용이다. 배포 전 반드시 `SECRET_KEY`를 교체하고, 기본 관리자 시드를 비활성화하거나 비밀번호를 변경하며, 로그인 화면의 기본 계정 안내 문구를 제거한다.** 전체 항목은 [`docs/architecture.md`의 배포 전 체크리스트](docs/architecture.md#배포-전-체크리스트-스타터-기본값-제거--must)를 확인한다.
+> **시드 관리자는 로컬 개발 전용이다. 배포 전 `APP_ENV=production` 으로 두고 `SECRET_KEY` 를 교체하며 `SEED_DEFAULT_ADMIN=false` 로 끈다 — 두 조건을 어기면 백엔드가 기동을 거부한다.** 전체 항목은 [`docs/architecture.md`의 배포 전 체크리스트](docs/architecture.md#배포-전-체크리스트-스타터-기본값-제거--must)를 확인한다.
 
 `middleware.ts`는 쿠키가 없는 사용자를 `/login`으로 보내고, 로그인 성공 후 검증된 내부 목적지 또는 홈으로 이동시킨다. `users.role`과 백엔드의 `require_admin` 의존성으로 관리자 API를 보호한다.
 
@@ -212,7 +212,7 @@ cd backend
 ./.venv/bin/python -m alembic upgrade head
 ```
 
-자세한 검토와 롤백 원칙은 [`docs/architecture.md` §11](docs/architecture.md#11-마이그레이션-alembic--must-db는-항상-alembic으로-관리)을 참고한다.
+자세한 검토와 롤백 원칙은 [`docs/architecture.md` §11](docs/architecture.md#11-마이그레이션-alembic---must-db는-항상-alembic으로-관리)을 참고한다.
 
 ## 테스트와 품질 검사
 
@@ -291,7 +291,7 @@ pnpm build
 | pydantic-settings | `== 2.14.2` | | |
 | PyJWT | `== 2.13.0` | | |
 
-### 프론트엔드 — 버전 확정 예정
+### 프론트엔드
 
 실제로 설치하고 lint · typecheck · test · build를 모두 통과한 뒤 버전을 확정한다. SSOT는 [`frontend/package.json`](frontend/package.json).
 

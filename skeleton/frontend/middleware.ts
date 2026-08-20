@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { SESSION_COOKIE } from "@/lib/session"
+import { SESSION_COOKIE } from "@/lib/session-cookie"
 
 // 인증 가드 (architecture.md §14). React SPA 판의 ProtectedRoute 컴포넌트에 대응한다.
 // 차이: 렌더 트리가 아니라 **요청 단계**에서 막는다 — 보호 페이지의 HTML 이 브라우저로
@@ -25,8 +25,12 @@ export function middleware(request: NextRequest) {
 export const config = {
   // ⚠️ matcher 에서 /login 과 정적 자산을 빼지 않으면 무한 리다이렉트가 난다
   //    (/login 요청 → 쿠키 없음 → /login 으로 리다이렉트 → …).
-  //    - login            : 로그인 화면 자신
-  //    - _next/static|image: 빌드 산출물·이미지 최적화
-  //    - favicon.ico 등    : `.` 이 들어간 public 정적 파일
-  matcher: ["/((?!login|_next/static|_next/image|.*\\.).*)"],
+  //    - login(?:/|$)      : 로그인 화면 자신. ⛔ 앵커 없이 `login` 만 쓰면 /login-history 같은
+  //                          평범한 보호 경로까지 가드 밖으로 새어나간다.
+  //    - _next/            : 빌드 산출물·이미지 최적화
+  //    - 정적 자산 확장자   : favicon.ico 등 public 파일. ⛔ "확장자처럼 생긴 모든 것"을 빼면
+  //                          /users/john.doe·/reports/2026.q1 같은 평범한 보호 경로까지 무방비가
+  //                          된다. 그래서 실제 정적 자산 확장자만 열거한다 — public/ 에 다른
+  //                          확장자를 추가하면 이 목록에도 넣어야 한다.
+  matcher: ["/((?!login(?:/|$)|_next/|.*\\.(?:ico|png|jpg|jpeg|gif|svg|webp|avif|css|js|map|txt|xml|json|webmanifest|woff2?)$).*)"],
 }

@@ -11,6 +11,13 @@ import os
 os.environ.setdefault("DATABASE_URL", "sqlite://")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-pytest-0123456789abcdef")
 
+# 시드 설정은 setdefault 가 아니라 대입이다 — 개발자의 backend/.env 값이 새어 들어오면
+# "지침대로 DEFAULT_ADMIN_PASSWORD 를 바꾼 사람만 테스트가 깨지는" 상태가 된다.
+# 운영 기본값은 config.py 에서 꺼져 있고(seed_default_admin=False), 테스트는 여기서 명시적으로 켠다.
+os.environ["APP_ENV"] = "test"
+os.environ["SEED_DEFAULT_ADMIN"] = "true"
+os.environ["DEFAULT_ADMIN_PASSWORD"] = "admin123"
+
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine  # noqa: E402

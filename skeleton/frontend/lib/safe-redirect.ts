@@ -29,7 +29,12 @@ function hasControlChar(value: string): boolean {
  * - 두 번째 문자가 `/` 나 `\` 가 아니다 → `//evil.example`·`/\evil.example` 는 브라우저가
  *   **스킴 상대 URL** 로 해석해 외부 도메인으로 나간다
  * - 백슬래시·공백·제어문자가 없다 (일부 브라우저는 `\` 를 `/` 로 정규화한다)
+ * - **정규화한 뒤에도** 스킴 상대 URL 이 아니다 — 문자열 검사만으로는 부족하다.
+ *   `/..//evil.example` 은 `/` 로 시작하고 두 번째 문자도 `/` 가 아니라 위 검사를 통과하지만,
+ *   `..` 세그먼트가 접히면 `//evil.example` 이 되어 막으려던 바로 그 형태가 된다.
  * - `/login` 자신으로 되돌아가지 않는다 (로그인 성공 → 다시 로그인 화면 루프 방지)
+ *
+ * 반환값은 **정규화된 경로**다. 원문을 그대로 돌려주면 위 불변식이 호출부까지 이어지지 않는다.
  */
 export function safeRedirect(value: unknown): string {
   if (typeof value !== "string") return DEFAULT_REDIRECT
@@ -38,9 +43,26 @@ export function safeRedirect(value: unknown): string {
   if (path === "" || path[0] !== "/") return DEFAULT_REDIRECT
   if (path[1] === "/" || path[1] === "\\") return DEFAULT_REDIRECT
   if (path.includes("\\") || /\s/.test(path) || hasControlChar(path)) return DEFAULT_REDIRECT
-  if (path === "/login" || path.startsWith("/login?") || path.startsWith("/login#")) {
+
+  // 브라우저와 같은 파서(WHATWG URL)로 정규화한 뒤 다시 본다.
+  // ⚠️ 기준 origin 은 RFC 2606 예약 TLD 라 실제 조회가 발생하지 않는다.
+  const BASE = "https://safe-redirect.invalid"
+  let url: URL
+  try {
+    url = new URL(path, BASE)
+  } catch {
     return DEFAULT_REDIRECT
   }
+  // 입력이 어떤 식으로든 origin 을 바꿨거나(절대 URL), `..` 가 접혀 스킴 상대 형태가 됐으면 거부.
+  if (url.origin !== BASE) return DEFAULT_REDIRECT
+  if (url.pathname.startsWith("//")) return DEFAULT_REDIRECT
+  // 인코딩된 슬래시는 URL 파서가 구분자로 풀지 않으므로 위 검사를 그대로 통과한다.
+  // 브라우저는 내부 경로로 취급하지만(=404), `%2f` 를 디코드하는 프록시·게이트웨이 뒤에서는
+  // `//evil.example` 로 되살아난다. 어차피 라우트에 매칭되지 않는 값이므로 거부한다.
+  if (/%2f|%5c/i.test(url.pathname)) return DEFAULT_REDIRECT
 
-  return path
+  // 트레일링 슬래시(`/login/`)와 하위 경로(`/login/foo`)까지 루프 가드에 포함한다.
+  if (url.pathname === "/login" || url.pathname.startsWith("/login/")) return DEFAULT_REDIRECT
+
+  return `${url.pathname}${url.search}${url.hash}`
 }

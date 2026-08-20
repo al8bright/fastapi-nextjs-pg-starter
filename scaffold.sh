@@ -59,6 +59,15 @@ if [ -f "$_VERSIONS_ENV" ]; then
   . "$_VERSIONS_ENV"
 fi
 
+# 런타임 핀 로드 — ⚠️ 반드시 _activate_version_managers 보다 먼저 읽어야 한다.
+# pyenv 는 "shim 이 PATH 에 있다"와 "어떤 버전을 쓴다"가 별개라, 활성화 시점에 핀 값이 필요하다.
+_PY_PIN_FILE="$SKELETON_DIR/.python-version"
+_PY_PIN=""
+[ -f "$_PY_PIN_FILE" ] && _PY_PIN="$(head -n1 "$_PY_PIN_FILE" | tr -d '[:space:]')"
+_NODE_PIN_FILE="$SKELETON_DIR/.nvmrc"
+_NODE_PIN=""
+[ -f "$_NODE_PIN_FILE" ] && _NODE_PIN="$(head -n1 "$_NODE_PIN_FILE" | tr -d '[:space:]' | sed 's/^v//')"
+
 # pyenv / fnm 이 설치돼 있으면 셸 세션에 활성화 (시스템 Python/Node 대신 버전 관리 도구 우선)
 _activate_version_managers() {
   if command -v pyenv >/dev/null 2>&1; then
@@ -66,11 +75,26 @@ _activate_version_managers() {
     export PATH="$PYENV_ROOT/bin:$PATH"
     eval "$(pyenv init --path 2>/dev/null || true)"
     eval "$(pyenv init - 2>/dev/null || true)"
+    # ⛔ pyenv init 은 shim 을 PATH 에 올릴 뿐 버전을 고르지 않는다.
+    #    pyenv global 이 system(예: 3.9.6)이면 python3 는 계속 system 을 가리켜
+    #    bootstrap 이 3.13 을 설치·재사용한 뒤에도 검증 단계에서 실패한다.
+    #    ⚠️ 설치돼 있지 않은 버전을 지정하면 모든 shim 호출이 깨지므로 반드시 설치 여부를 확인한다.
+    if [ -n "${_PY_PIN:-}" ] && pyenv versions --bare 2>/dev/null | grep -qx "$_PY_PIN"; then
+      export PYENV_VERSION="$_PY_PIN"
+    else
+      # 핀이 설치돼 있지 않으면 하한을 충족하는 설치본 중 가장 높은 것을 고른다 (system 폴백 방지)
+      _pv="$(pyenv versions --bare 2>/dev/null | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+             | awk -v min="${MIN_PYTHON:-3.13}" 'index($0, min ".") == 1 || $0 == min' \
+             | sort -V | tail -n1)"
+      [ -n "$_pv" ] && export PYENV_VERSION="$_pv"
+    fi
   fi
   if command -v fnm >/dev/null 2>&1; then
     eval "$(fnm env --use-on-cd 2>/dev/null || true)"
-    # 템플릿 루트에는 .nvmrc 가 없으므로 최소 Node 버전을 명시해 활성화
-    fnm use "${MIN_NODE:-24}" 2>/dev/null || true
+    # .nvmrc 핀을 우선 존중하고, 실패하면 최소 Node 버전으로 활성화한다
+    # (템플릿 루트에는 .nvmrc 가 없으므로 cd 훅만으로는 활성화되지 않는다)
+    fnm use "${_NODE_PIN:-${MIN_NODE:-24}}" >/dev/null 2>&1 \
+      || fnm use "${MIN_NODE:-24}" >/dev/null 2>&1 || true
   fi
 }
 _activate_version_managers
@@ -104,12 +128,9 @@ _NODE="$(_ext_ver "$(node --version 2>/dev/null || true)")"
 _meets "${MIN_NODE:-24}" "$_NODE" || _need_bootstrap=1
 _PNPM="$(_ext_ver "$(pnpm --version 2>/dev/null || true)")"
 _meets "${MIN_PNPM:-11}" "$_PNPM" || _need_bootstrap=1
-# skeleton/.python-version 핀 처리
+# skeleton/.python-version 핀 처리 (_PY_PIN 로드는 위 활성화 블록보다 앞에서 이미 끝났다)
 #  - pyenv 가 있으면: 핀된 정확한 버전이 실제 설치돼 있어야 한다(없으면 bootstrap 이 설치 시도).
 #  - pyenv 가 없으면: 핀을 강제할 수단이 없다. 하한을 충족하는 Python 을 쓰되 CI 와의 차이만 경고한다.
-_PY_PIN_FILE="$SKELETON_DIR/.python-version"
-_PY_PIN=""
-[ -f "$_PY_PIN_FILE" ] && _PY_PIN="$(head -n1 "$_PY_PIN_FILE" | tr -d '[:space:]')"
 if [ -n "$_PY_PIN" ]; then
   if command -v pyenv >/dev/null 2>&1; then
     if [ "$_need_bootstrap" = "0" ] && ! pyenv versions --bare 2>/dev/null | grep -qx "$_PY_PIN"; then
@@ -134,6 +155,11 @@ if [ "$_need_bootstrap" = "1" ]; then
   if [ -f "$_BOOTSTRAP" ]; then
     warn "필수 도구 또는 Python·Node·pnpm 버전이 기준 미달 — bootstrap.sh 를 먼저 실행합니다 …"
     _PIN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/scaffold-pin.XXXXXX")"
+    # 골격의 핀을 미리 심어 bootstrap 이 "기존 .python-version 핀 존중" 경로를 타게 한다.
+    # ⛔ 빈 폴더를 넘기면 bootstrap 이 핀을 못 읽고 임의의 최신 패치를 골라, 생성 프로젝트의
+    #    런타임 버전이 "스캐폴드를 돌린 날"에 따라 달라진다(재현 불가).
+    [ -f "$_PY_PIN_FILE" ]   && cp "$_PY_PIN_FILE"   "$_PIN_DIR/.python-version"
+    [ -f "$_NODE_PIN_FILE" ] && cp "$_NODE_PIN_FILE" "$_PIN_DIR/.nvmrc"
     bash "$_BOOTSTRAP" --project-root "$_PIN_DIR"
     _rc=$?
     if [ "$_rc" -ne 0 ]; then
@@ -141,8 +167,12 @@ if [ "$_need_bootstrap" = "1" ]; then
       rm -rf "$_PIN_DIR"
       exit 1
     fi
+    # bootstrap 이 실제로 고정한 버전을 핀으로 재채택한 뒤 활성화한다.
+    # (핀이 pyenv 에 없어 bootstrap 이 다른 패치로 폴백했을 수 있다)
+    [ -f "$_PIN_DIR/.python-version" ] && _PY_PIN="$(head -n1 "$_PIN_DIR/.python-version" | tr -d '[:space:]')"
+    [ -f "$_PIN_DIR/.nvmrc" ] && _NODE_PIN="$(head -n1 "$_PIN_DIR/.nvmrc" | tr -d '[:space:]' | sed 's/^v//')"
     _activate_version_managers                                    # bootstrap 후 현재 프로세스에 재적용
-    command -v fnm >/dev/null 2>&1 && fnm use "${MIN_NODE:-24}" 2>/dev/null || true  # Node 버전 명시 활성화
+                                                                  # (fnm use 는 이 함수 안에서 핀 기준으로 수행된다)
 
     # 검증 기준은 "런타임이 하한을 충족하는가"이지 "pyenv·fnm 이 설치됐는가"가 아니다 —
     # 관리자 없이 기존 설치본을 재사용하는 경로가 정상 경로이기 때문이다.
@@ -245,6 +275,14 @@ case "$TARGET" in
 esac
 
 SNAKE=$(printf '%s' "$NAME" | sed -E 's/([a-z0-9])([A-Z])/\1_\2/g' | tr 'A-Z' 'a-z' | sed -E 's/[^a-z0-9]+/_/g; s/^_+//; s/_+$//')
+# ⛔ ASCII 영숫자가 하나도 없으면(예: --name "내앱") SNAKE 가 빈 문자열이 된다.
+#    그대로 두면 DATABASE_URL 에 DB 이름이 없고, 쿠키가 "_session", npm 이름이 "-frontend" 가 되며
+#    CREATE DATABASE "" 로 실패한다 — 게다가 종료 코드 0 이라 조용히 깨진 프로젝트가 나온다.
+if [ -z "$SNAKE" ]; then
+  echo "프로젝트 이름에서 식별자를 만들 수 없습니다: $NAME" >&2
+  echo "  ASCII 영문자·숫자를 1자 이상 포함하세요 (DB 이름·npm 패키지명·쿠키명에 쓰입니다)." >&2
+  exit 1
+fi
 [ -z "$DB_NAME" ] && DB_NAME="$SNAKE"
 ok "이름=$NAME  snake=$SNAKE  위치=$TARGET"
 
@@ -345,10 +383,29 @@ if command -v openssl >/dev/null 2>&1; then SECRET=$(openssl rand -hex 24)
 elif command -v python3 >/dev/null 2>&1; then SECRET=$(python3 -c 'import secrets;print(secrets.token_hex(24))')
 else SECRET="change-me-$(date +%s)"; fi
 
+# 초기 관리자 비밀번호도 무작위로 생성한다.
+# ⛔ 하드코딩된 기본값(admin123)을 쓰면 이 템플릿으로 만든 모든 프로젝트가 같은 자격증명을 갖는다.
+if command -v openssl >/dev/null 2>&1; then SEED_ADMIN_PW=$(openssl rand -base64 12 | tr -d '/+=' | cut -c1-16)
+elif command -v python3 >/dev/null 2>&1; then SEED_ADMIN_PW=$(python3 -c 'import secrets;print(secrets.token_urlsafe(12))')
+else SEED_ADMIN_PW="admin-$(date +%s)"; fi
+
 # ---------- 2. 복사 ----------
 step "골격 복사 → $TARGET"
 if [ -d "$TARGET" ] && [ -n "$(ls -A "$TARGET" 2>/dev/null)" ]; then
   warn "대상 디렉토리가 비어있지 않습니다 — 기존 파일 위에 골격을 덮어씁니다: $TARGET"
+  # ⛔ 재실행은 파괴적이다(사용자가 고친 골격 파일이 원본으로 되돌아간다).
+  #    대화형이면 확인을 받고, 비대화형(CI·스크립트)이면 중단한다.
+  if [ -t 0 ]; then
+    printf "  계속할까요? 기존 파일을 덮어씁니다 (y/N): "
+    read -r _overwrite_ans
+    case "$_overwrite_ans" in
+      [Yy]*) : ;;
+      *) echo "중단합니다." >&2; exit 1 ;;
+    esac
+  else
+    warn "비대화형 실행이므로 중단합니다. 덮어쓰려면 대상 디렉터리를 비우거나 대화형으로 실행하세요."
+    exit 1
+  fi
 fi
 mkdir -p "$TARGET" || { warn "대상 디렉토리 생성 실패: $TARGET"; exit 1; }
 cp -R "$SKELETON_DIR/." "$TARGET/" || { warn "골격 복사 실패 (권한/디스크 확인) — 중단합니다"; exit 1; }
@@ -385,6 +442,12 @@ ok "치환 완료"
 
 # ---------- 4. .env ----------
 step ".env 생성 (OS 무관 주입 — architecture.md §5)"
+# ⛔ 기존 .env 를 덮어쓰면 SECRET_KEY 가 재발급되어 발급된 JWT 가 전부 무효가 되고,
+#    손으로 채운 DB 비밀번호도 사라진다. 백업을 남긴 뒤 새로 쓴다.
+if [ -f "$TARGET/backend/.env" ]; then
+  _env_bak="$TARGET/backend/.env.bak.$(date +%Y%m%d%H%M%S)"
+  cp "$TARGET/backend/.env" "$_env_bak" && warn "기존 backend/.env 를 백업했습니다: $(basename "$_env_bak")"
+fi
 cat > "$TARGET/backend/.env" <<EOF || { warn "backend/.env 생성 실패 — 중단합니다"; exit 1; }
 DATABASE_URL=$DATABASE_URL
 SECRET_KEY=$SECRET
@@ -393,7 +456,13 @@ CORS_ORIGINS=http://localhost:3000
 FRONTEND_URL=http://localhost:3000
 BACKEND_PUBLIC_URL=http://localhost:8000
 TZ=Asia/Seoul
+APP_ENV=development
+# 초기 관리자 시드 — 코드 기본값은 꺼져 있고(backend/app/config.py) 개발 편의를 위해 여기서만 켠다.
+# ⛔ 배포 전 SEED_DEFAULT_ADMIN=false 로 끄고 APP_ENV=production 으로 바꾼다.
+SEED_DEFAULT_ADMIN=true
+DEFAULT_ADMIN_PASSWORD=$SEED_ADMIN_PW
 EOF
+chmod 600 "$TARGET/backend/.env" 2>/dev/null || warn "backend/.env 권한 설정 실패 — 수동으로 chmod 600 하세요"
 printf 'FASTAPI_URL=http://localhost:8000\n' > "$TARGET/frontend/.env" \
   || { warn "frontend/.env 생성 실패 — 중단합니다"; exit 1; }
 ok "backend/.env, frontend/.env 생성 (DATABASE_URL, SECRET_KEY 주입)"
@@ -495,6 +564,11 @@ cat <<EOF
   cd "$FRONTEND"
   pnpm dev              # 개발 서버
   pnpm typecheck        # 타입 검사 (tsc --noEmit)
+
+[로그인]  초기 관리자 계정 (backend/.env 의 DEFAULT_ADMIN_PASSWORD):
+  아이디: admin
+  비밀번호: $SEED_ADMIN_PW
+  ⛔ 배포 전 이 계정의 비밀번호를 바꾸고 SEED_DEFAULT_ADMIN=false, APP_ENV=production 으로 설정하세요.
 
 [확인]    브라우저: http://localhost:3000
           → '백엔드 API'와 '데이터베이스'가 모두 '정상'이면 성공입니다.
