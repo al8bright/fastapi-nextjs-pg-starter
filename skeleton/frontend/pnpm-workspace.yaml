@@ -1,0 +1,12 @@
+# pnpm 10+ : 의존성 빌드 스크립트 허용 (네이티브 바이너리 링크).
+# 없으면 'pnpm install' 이 ERR_PNPM_IGNORED_BUILDS 로 비정상 종료한다.
+# pnpm 11 의 키는 allowBuilds **맵**이다. pnpm 10 의 onlyBuiltDependencies 리스트를
+# 그대로 두면 무시될 뿐 아니라, pnpm 이 이 파일에 allowBuilds 항목을 자동 삽입해
+# 템플릿을 오염시킨다.
+#
+# ⚠️ 의존성을 추가할 때 pnpm 이 "Ignored build scripts" 를 경고하면 여기에 추가한다.
+#    (현재 목록은 실제로 요구되는 것만 담았다 — 없는 패키지를 미리 넣어두면 무엇이 실제로
+#     빌드 스크립트를 쓰는지 알 수 없게 된다. 예: @tailwindcss/oxide 는 프리빌드 바이너리라 불필요.)
+#    unrs-resolver 는 eslint-import-resolver-typescript(eslint-config-next)가 끌고 오는 네이티브 모듈이다.
+allowBuilds:
+  unrs-resolver: true

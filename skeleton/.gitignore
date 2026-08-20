@@ -1,0 +1,31 @@
+# === 환경설정 (절대 커밋 금지) ===
+.env
+.env.*
+!.env.example
+
+# === Python / 백엔드 ===
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.sqlite3
+*.db
+
+# === Node / 프론트엔드 (Next.js) ===
+node_modules/
+.next/
+out/
+next-env.d.ts
+dist/
+*.tsbuildinfo
+*.local
+
+# === IDE / OS ===
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

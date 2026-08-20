@@ -1,0 +1,16 @@
+# 이 템플릿 저장소 자체의 무시 목록.
+# (생성된 프로젝트가 받는 무시 목록은 skeleton/.gitignore 다.)
+
+# 로컬 도구 설정 — 자격증명이 들어갈 수 있으므로 커밋 금지
+.claude/settings.local.json
+
+# 환경설정
+.env
+.env.*
+!.env.example
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

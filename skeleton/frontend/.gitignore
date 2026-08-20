@@ -1,0 +1,26 @@
+# 의존성
+node_modules/
+.pnp
+.pnp.*
+
+# Next 빌드 산출물
+.next/
+out/
+build/
+# next build / next typegen 이 매번 다시 만든다 (커밋하지 않는다).
+# ⚠️ 이 파일이 없어도 `tsc --noEmit` 은 통과한다(skipLibCheck). 대신 next/link 의 typedRoutes
+#    같은 생성 타입은 빌드 후에만 검증된다 — CI 는 typecheck 뒤에 build 까지 반드시 돌린다.
+next-env.d.ts
+
+# 테스트/커버리지
+coverage/
+
+# 환경변수 (architecture.md §17) — .env.example 만 커밋한다
+.env
+.env.local
+.env.*.local
+
+# 기타
+.DS_Store
+*.tsbuildinfo
+.vercel/
