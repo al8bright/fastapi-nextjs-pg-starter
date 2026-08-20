@@ -63,7 +63,7 @@ description: __PROJECT_NAME__ 의 고정 스택 버전과 버전별 주의사항
   matcher: ["/((?!login|_next/static|_next/image|.*\\.).*)"]
   ```
   `login`(로그인 화면) · `_next/static`·`_next/image`(빌드 산출물·이미지 최적화) · `.*\.`(favicon.ico 처럼 **확장자가 있는** public 정적 파일)을 빼놓은 것이다. 공개 경로를 늘릴 땐 이 제외 목록에 더한다 — ⛔ 보호 경로를 나열하는 방식으로 바꾸면 새 라우트가 조용히 무방비가 된다.
-- ⚠️ **오픈 리다이렉트 방지**: `next` 파라미터를 그대로 `redirect()` 에 넣으면 외부 사이트로 유도할 수 있다. `lib/safe-redirect.ts` 로 **내부 경로만** 통과시킨다 — `/` 로 시작하고, `//` 로 시작하지 않고, 스킴(`http:`·`javascript:` 등)이 없는 것만. 그 외에는 `/` 로 떨어뜨리고, **이 검증 함수에는 테스트를 붙인다.**
+- ⚠️ **오픈 리다이렉트 방지**: `next` 파라미터를 그대로 `redirect()` 에 넣으면 외부 사이트로 유도할 수 있다. `lib/safe-redirect.ts` 로 **내부 경로만** 통과시킨다 — `/` 로 시작(이것만으로 `https:`·`javascript:` 스킴이 걸러진다)하고, 두 번째 문자가 `/`·`\` 가 아니며, 백슬래시·공백·제어문자가 없고, `/login` 자신이 아닌 것만. 그 외에는 `/` 로 떨어뜨리고(query·hash 는 보존), **이 검증 함수에는 테스트를 붙인다**(`lib/safe-redirect.test.ts`).
 - 미들웨어는 요청마다 돈다. 무거운 작업(DB·외부 API 호출)을 넣지 말고 쿠키 존재 확인 수준으로 유지한다.
 
 ### Tailwind v4 + Next — `4.3`
@@ -87,10 +87,10 @@ description: __PROJECT_NAME__ 의 고정 스택 버전과 버전별 주의사항
 
 ### 인증 / 린트·CI
 - 자체 계정 비밀번호는 **bcrypt** 해시(`core/security` 의 `hash_password`/`verify_password`). JWT `sub` = user id.
-- 프론트 린트는 **ESLint flat config**(`frontend/eslint.config.mjs`): `@eslint/js` recommended + **`eslint-config-next/core-web-vitals`** + **`eslint-config-next/typescript`**. ⚠️ `core-web-vitals` 만 넣으면 **타입스크립트 규칙이 하나도 켜지지 않아**(파서만 붙는다) `any`·미사용 변수를 못 잡는다 — `typescript` 진입점을 반드시 함께 넣는다. eslint-config-next 16 은 flat config 배열을 그대로 export 하므로 `FlatCompat` 로 감쌀 필요가 없다. ESLint 본체는 **9 계열**이다 — 형제 저장소(React SPA 판)가 10 이어도 여기선 Next 가 묶어 오는 계열을 따른다.
+- 프론트 린트는 **ESLint flat config**(`frontend/eslint.config.mjs`): `@eslint/js` recommended + **`eslint-config-next/core-web-vitals`** + **`eslint-config-next/typescript`**. ⚠️ `core-web-vitals` 만 넣으면 **타입스크립트 규칙이 하나도 켜지지 않아**(파서만 붙는다) `any`·미사용 변수를 못 잡는다 — `typescript` 진입점을 반드시 함께 넣는다. 이 계열의 eslint-config-next 는 flat config 배열을 그대로 export 하므로 `FlatCompat`(Next 15 시절 템플릿)로 감쌀 필요가 없다. ⚠️ **ESLint 본체 메이저는 `eslint-config-next` 가 요구하는 계열에 맞춘다** — 형제 저장소(React SPA 판)가 더 앞선 메이저를 써도 여기선 Next 쪽을 따른다. 실제 값은 `frontend/package.json`(§1).
 - 백엔드 린트는 **ruff**(`backend/pyproject.toml`): FastAPI `Depends` 등은 **B008 예외**(`extend-immutable-calls`), `alembic/` 제외, line-length 120. 새 의존성으로 lint 가 깨지면 이 설정을 먼저 본다.
 - **CI**(`.github/workflows/ci.yml`)가 push·PR(main) 마다 실행: `backend`(ruff → pytest(SQLite in-memory))는 **`ubuntu-latest`·`windows-latest` OS 매트릭스**로 돌려 OS 분기 버그를 잡고, `migrations`(**alembic upgrade head + alembic check**, postgres:16 서비스 컨테이너에 `DATABASE_URL` 주입)는 **ubuntu 전용 잡**으로 분리한다 — ⛔ 서비스 컨테이너는 Linux 러너에서만 뜨므로 매트릭스 잡에 `services:` 를 두면 Windows 잡이 시작조차 못 한다. `powershell-syntax` 잡은 Windows PowerShell 5.1 로 모든 `.ps1` 을 파싱하고 PS7 전용 토큰(`??`·`&&`·`||`·`?.`)을 거부한다. frontend 는 **`eslint` → `typecheck`(`tsc --noEmit`) → `test`(vitest) → `build`(`next build`)** 순으로 돈다. Python/Node 버전은 하드코딩 대신 **`python-version-file: .python-version` / `node-version-file: .nvmrc`** 로 읽으므로 버전 상향 시 핀 파일만 갱신하면 된다. 워크플로는 생성 프로젝트(루트)에서만 동작한다.
-- frontend 는 **`pnpm-lock.yaml` 커밋 필수**(skeleton 에 포함됨) — CI 환경(`CI=true`)의 pnpm 은 frozen-lockfile 이 기본이라 lockfile 이 없거나 `package.json` 과 어긋나면 설치가 실패한다. 의존성 변경 시 lockfile 도 함께 커밋한다.
+- frontend 는 **`pnpm-lock.yaml` 커밋 필수** — skeleton 에는 없고 scaffold 의 첫 `pnpm install` 이 생성하므로, **생성 프로젝트의 최초 커밋에 반드시 포함**시킨다. CI 환경(`CI=true`)의 pnpm 은 frozen-lockfile 이 기본이라 lockfile 이 없거나 `package.json` 과 어긋나면 설치가 실패한다. 의존성 변경 시 lockfile 도 함께 커밋한다.
 
 ## 4. 백엔드 핀 정책
 - `requirements.txt` 는 **`==` 정확 핀, 재현성 우선**(architecture.md §2).

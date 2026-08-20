@@ -478,7 +478,7 @@ frontend/
 - `'use client'` 컴포넌트에는 **토큰·세션 원본을 props 로 내려보내지 않는다.** 필요한 최소 표시값(사용자명 등)만 넘긴다.
 - 테스트는 대상 파일 옆에 `*.test.ts(x)` 로 둔다(예: `lib/safe-redirect.test.ts`). 아래 **프론트엔드 테스트** 항목 참조.
 
-백엔드 스키마와 동기화되는 타입은 **`lib/types.ts` 한 곳**에 모은다(`User`·`UserRole`·`TokenResponse`·`DbHealth`). 유니온은 리터럴(`'active' | 'closed'`).
+백엔드 스키마와 동기화되는 타입은 **`lib/types.ts` 한 곳**에 모은다(`User`·`UserRole`·`TokenResponse`·`DbHealth`·`Health`). 유니온은 리터럴(`'active' | 'closed'`).
 
 `lib/server/fastapi.ts` (★ FastAPI 로 나가는 **유일한** 출구 — 서버 전용):
 ```ts
@@ -646,7 +646,8 @@ import { Suspense } from "react"
 import { fastapiFetch } from "@/lib/server/fastapi"
 import type { Health } from "@/lib/types"
 
-// 서버에서 실행된다 — 브라우저는 이 요청을 보지 못하고, 토큰도 넘어가지 않는다.
+// StatusBadge 는 같은 파일의 표시용 컴포넌트다(클라이언트 컴포넌트가 아니다).
+// 아래 함수는 서버에서 실행된다 — 브라우저는 이 요청을 보지 못하고, 토큰도 넘어가지 않는다.
 async function ApiStatus() {
   let ok = false
   try {
@@ -731,6 +732,9 @@ export default function LandingPage() {
 // lib/safe-redirect.ts
 export const DEFAULT_REDIRECT = "/"
 
+// hasControlChar(): 제어문자(개행·탭 포함) 검사 — 정규식에 제어문자를 직접 쓰지 않고
+// charCodeAt 로 `< 0x20 || === 0x7f` 를 본다(소스에 보이지 않는 바이트를 남기지 않기 위해).
+
 export function safeRedirect(value: unknown): string {
   if (typeof value !== "string") return DEFAULT_REDIRECT     // searchParams 는 배열, FormData 는 File 도 준다
   const path = value.trim()
@@ -769,7 +773,12 @@ export const config = {
 ```
 
 ```tsx
-// app/login/page.tsx — 서버 컴포넌트 껍데기
+// app/login/page.tsx — 서버 컴포넌트 껍데기 (폼만 클라이언트다)
+import { redirect } from "next/navigation"
+import LoginForm from "@/components/LoginForm"
+import { safeRedirect } from "@/lib/safe-redirect"
+import { getSessionToken } from "@/lib/session"
+
 // ⚠️ searchParams 는 Promise 다. await 없이 프로퍼티를 읽으면 **조용히 undefined** 가 되어
 //    복귀 경로가 늘 "/" 로 떨어진다(에러도 나지 않는다).
 export default async function LoginPage({

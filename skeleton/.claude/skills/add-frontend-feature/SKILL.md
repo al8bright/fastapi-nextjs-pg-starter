@@ -66,13 +66,18 @@ description: __PROJECT_NAME__ 프론트엔드(Next.js App Router)에 기능·페
    }: {
      searchParams: Promise<Record<string, string | string[] | undefined>>
    }) {
-     const params = await searchParams          // ★ await 없이 params.q 를 읽으면 undefined
-     const user = await getSessionUser("/events")
-     const events = await listEvents()
+     const params = await searchParams            // ★ await 없이 params.q 를 읽으면 undefined
+     const q = typeof params.q === "string" ? params.q : ""
+     const user = await getSessionUser("/events")  // 401 이면 여기서 /login?next=/events 로 나간다
+     const events = (await listEvents()).filter(e => e.title.includes(q))
+
      return (
-       <ul className="divide-y divide-outline-variant">
-         {events.map(e => <li key={e.id} className="py-2 text-on-surface">{e.title}</li>)}
-       </ul>
+       <section>
+         <h1 className="text-on-surface">{user?.username ?? "알 수 없음"} 님의 이벤트</h1>
+         <ul className="divide-y divide-outline-variant">
+           {events.map(e => <li key={e.id} className="py-2 text-on-surface">{e.title}</li>)}
+         </ul>
+       </section>
      )
    }
    ```
@@ -157,13 +162,13 @@ description: __PROJECT_NAME__ 프론트엔드(Next.js App Router)에 기능·페
    }
    ```
    - 공개 페이지를 늘리려면 이 정규식의 제외 목록에 추가한다(예: `(?!login|signup|_next/…)`). ⛔ 보호 경로를 나열하는 방식으로 바꾸면 새 라우트가 조용히 무방비가 된다.
-   - ⚠️ **오픈 리다이렉트 방지**: `next` 파라미터는 그대로 쓰면 취약점이 된다. `lib/safe-redirect.ts` 로 **내부 경로만** 통과시킨다 — `/` 로 시작하고, `//` 로 시작하지 않고, 스킴(`http:`·`javascript:` 등)이 없는 것만. 그 밖에는 `/` 로 떨어뜨린다. 이 검증 함수에는 **테스트를 반드시 붙인다.**
+   - ⚠️ **오픈 리다이렉트 방지**: `next` 파라미터는 그대로 쓰면 취약점이 된다. `safeRedirect()` 로 **내부 경로만** 통과시킨다 — `/` 로 시작(이것만으로 `https:`·`javascript:` 가 걸러진다)하고, 두 번째 문자가 `/`·`\` 가 아니며, 백슬래시·공백·제어문자가 없고, `/login` 자신이 아닌 것만. 그 밖에는 `/` 로 떨어뜨린다(query·hash 는 보존). 이 검증 함수에는 **테스트를 반드시 붙인다.**
 
 6. **테스트** `frontend/` — Vitest (`pnpm test`)
    - 대상 파일 옆에 `*.test.ts(x)`(`vitest.config.ts` 의 include 는 `{app,components,lib}/**/*.test.{ts,tsx}`). 우선순위는 **`lib/` 의 순수 함수**(특히 `safe-redirect`, 에러 메시지 매핑, 타입 가드)와 **클라이언트 컴포넌트**(폼이 Action 에 넘기는 FormData, 오류 표시, 대기 중 비활성)다. 스켈레톤의 예시는 `lib/safe-redirect.test.ts` 와 `components/LoginForm.test.tsx` 둘뿐이다.
    - ⛔ `lib/server/*`·`lib/session.ts`·`lib/actions/*` 는 `server-only` 를 끌고 와 러너에서 **로드조차 되지 않는다.** 클라이언트 컴포넌트 테스트는 Action 모듈을 통째로 `vi.mock` 해서 끊는다(`vi.mock("@/lib/actions/auth", …)`).
    - ⚠️ **서버 컴포넌트와 Server Action 은 러너 밖의 Next 런타임(요청 컨텍스트·`cookies()`·캐시)에 의존한다.** **억지로 테스트를 만들지 마라** — 무리하게 모킹한 테스트는 구현을 고정할 뿐 회귀를 못 잡는다. 대신 로직을 순수 함수로 뽑아 그것을 테스트하고, 통합 확인은 `pnpm build` + 수동 동작 확인으로 대신한다.
-   - `tsc --noEmit`·`eslint` 가 못 잡는 **런타임 동작**을 고정한다 — §14 가 ⛔ 로 규정한 것들(오픈 리다이렉트 통과, 세션 없는 접근, 로그인 실패 문구)이 1순위다.
+   - `tsc --noEmit`·`eslint` 가 못 잡는 **런타임 동작**을 고정한다 — §14 가 ⛔ 로 규정한 것들 중 **러너에서 검증 가능한 것**(오픈 리다이렉트 통과, 복귀 경로의 query 보존, 로그인 실패 문구 표시)이 1순위다. 미인증 접근 차단은 middleware 몫이라 여기서 덮지 못한다 — `pnpm build` 후 수동으로 확인한다.
 
 ## 인증/세션 (§14)
 
