@@ -245,7 +245,7 @@ chmod +x scaffold.sh          # 최초 1회 (실행 권한이 없을 때)
 3. 생성 프로젝트의 [`README.md`](skeleton/README.md)·[`docs/architecture.md`](skeleton/docs/architecture.md)·
    [`plan.md`](skeleton/plan.md) 를 읽고 TDD(Red→Green→Refactor)로 개발 시작
 
-개발용 기본 관리자는 `admin` / `admin123` 이며 기동 시 자동 시드된다.
+개발용 기본 관리자는 `admin` 이며, 비밀번호는 스캐폴드가 프로젝트마다 무작위로 생성해 `backend/.env` 의 `DEFAULT_ADMIN_PASSWORD` 에 넣고 완료 안내에 출력한다. 시드는 코드 기본값이 꺼져 있고(`SEED_DEFAULT_ADMIN=false`) 이 `.env` 에서만 켜진다.
 **운영 배포 전에는** `SECRET_KEY` 교체, 기본 관리자 시드 비활성화 또는 비밀번호 변경,
 로그인 화면의 기본 계정 안내 제거가 필요하다.
 세부 항목은 [아키텍처 §21의 배포 전 체크리스트](skeleton/docs/architecture.md#21-신규-프로젝트-부트스트랩-체크리스트)를 확인한다.
@@ -283,7 +283,7 @@ chmod +x scaffold.sh          # 최초 1회 (실행 권한이 없을 때)
 | 런타임 하한 | 이상이면 기존 설치본 재사용 | Python `≥ 3.13`, Node.js `≥ 24`, pnpm `≥ 11` | [`versions.env`](skeleton/scripts/versions.env) |
 | 런타임 설치 핀 | pyenv·fnm·corepack 이 설치·활성화 | Python `3.13.14`, Node.js `24`(24.x 최신), pnpm `11.9.0` | [`.python-version`](skeleton/.python-version), [`.nvmrc`](skeleton/.nvmrc), `package.json` 의 `packageManager` |
 | 백엔드 패키지 | `==` **정확 고정** (재현성 우선) | fastapi `0.137.2`, sqlalchemy `2.0.51` 등 13개 | [`requirements.txt`](skeleton/backend/requirements.txt) |
-| 프론트엔드 패키지 | 검증된 호환 범위로 고정 (TypeScript만 `~`) | next `^16.3`, react `^19.2`, typescript `~6.0`, tailwindcss `^4.3`, vitest `^4.1` 등 | [`package.json`](skeleton/frontend/package.json) |
+| 프론트엔드 패키지 | 런타임 4종은 `==` 정확 고정, TypeScript 는 `~`, 그 외 도구는 `^` | next `16.3.1`, react·react-dom `19.2.8`, eslint-config-next `16.3.1`, typescript `~6.0.3`, tailwindcss `^4.3.3`, vitest `^4.1.11` 등 | [`package.json`](skeleton/frontend/package.json), [`pnpm-lock.yaml`](skeleton/frontend/pnpm-lock.yaml) |
 | PostgreSQL | 고정 없음 | `psycopg2-binary` 지원 범위(14+ 권장), CI 는 `postgres:16` | — |
 
 패키지별 전체 목록은 [생성 프로젝트 README의 기술 스택과 버전](skeleton/README.md#기술-스택과-버전)에 있다.
@@ -335,7 +335,7 @@ chmod +x scaffold.sh          # 최초 1회 (실행 권한이 없을 때)
   (`.disabled\:opacity-60:disabled{opacity:.6}`) 모두 실제로 생성됨
 - 구동(SQLite + `uvicorn` + `next start` 프로덕션 빌드, 다른 프로세스와 겹치지 않는 포트 사용):
   - `GET /api/v1/health` → `{"status":"ok"}`
-  - 기본 관리자 시드(`admin`/`admin123`) 로그인 → access token 발급
+  - 기본 관리자 시드(`admin` + 무작위 비밀번호) 로그인 → access token 발급
   - 미인증 `GET /` → **307 → `/login?next=%2F`** (middleware 동작). `/landing`·`/my` 도 동일
   - `GET /login` → 200, 로그인 폼 HTML 반환 (middleware matcher 가 `/login` 을 제외해 루프 없음)
   - **Server Action 로그인을 curl 로 직접 검증**(progressive enhancement 폼 POST) →

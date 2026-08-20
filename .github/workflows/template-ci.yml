@@ -10,14 +10,25 @@ on:
   pull_request:
     branches: [main]
 
+# 최소 권한 — 미선언이면 리포/조직 설정에 따라 GITHUB_TOKEN 이 read-write 로 발급된다.
+# 이 워크플로는 체크아웃과 검증만 하므로 읽기면 충분하다.
+permissions:
+  contents: read
+
+# 같은 브랜치에 연속 push 하면 이전 실행을 취소해 러너 시간을 아낀다.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # ── 1. PowerShell 구문 검사 (가장 중요) ──────────────────────────────────
   # scaffold.ps1 은 #requires -Version 5.1 을 선언한다. Windows 기본 셸이 5.1 이므로
   # PS7 전용 문법(??, ?:, &&/||)이 하나라도 있으면 파싱 단계에서 통째로 죽는다.
   powershell-syntax:
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Parse .ps1 with Windows PowerShell 5.1
         shell: powershell # pwsh 로 바꾸면 PS7 전용 문법을 놓친다
         run: |
@@ -76,8 +87,9 @@ jobs:
   # 실행 없이 파싱만 하는 `bash -n` 으로 전체 .sh 를 훑는다.
   bash-syntax:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: bash -n (모든 .sh)
         run: |
           failed=0
@@ -101,12 +113,13 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version-file: skeleton/.python-version
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version-file: skeleton/.nvmrc
       - name: Enable pnpm (corepack)
@@ -140,10 +153,11 @@ jobs:
           ruff check .
           pytest -q
 
-      - name: 생성물 프론트 검증 (install + lint + test + build)
+      - name: 생성물 프론트 검증 (install + lint + typecheck + test + build)
         working-directory: ${{ runner.temp }}/CiDemo/frontend
         run: |
           pnpm install
           pnpm lint
+          pnpm typecheck
           pnpm test
           pnpm build

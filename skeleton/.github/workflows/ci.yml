@@ -8,6 +8,16 @@ on:
   pull_request:
     branches: [main]
 
+# 최소 권한 — 미선언이면 리포/조직 설정에 따라 GITHUB_TOKEN 이 read-write 로 발급된다.
+# 이 워크플로는 체크아웃과 검증만 하므로 읽기면 충분하다.
+permissions:
+  contents: read
+
+# 같은 브랜치에 연속 push 하면 이전 실행을 취소해 러너 시간을 아낀다.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   backend:
     # 이 프로젝트는 Windows 와 macOS/Linux 에서 함께 개발한다.
@@ -17,12 +27,13 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version-file: .python-version
           cache: pip
@@ -42,6 +53,7 @@ jobs:
     # windows-latest 는 Linux 컨테이너를 띄우지 못하므로 DB 검증만 별도 ubuntu 잡으로 분리했다.
     # (backend 잡을 OS 매트릭스로 돌리면서 services 를 그대로 두면 Windows 잡이 시작조차 못 한다.)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: backend
@@ -60,8 +72,8 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version-file: .python-version
           cache: pip
@@ -82,8 +94,9 @@ jobs:
   # PS7 전용 문법(??, ?:, &&/||)이 하나라도 섞이면 5.1 은 한 줄도 실행하지 못하고 죽는다.
   powershell-syntax:
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Parse all .ps1 with Windows PowerShell 5.1
         shell: powershell # pwsh 가 아니라 5.1 이어야 의미가 있다
         run: |
@@ -124,12 +137,13 @@ jobs:
 
   frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
       - name: Enable pnpm (corepack)

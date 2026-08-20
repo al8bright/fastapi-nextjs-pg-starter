@@ -8,13 +8,21 @@ description: __PROJECT_NAME__ 의 DB 스키마를 바꿀 때(SQLAlchemy 모델 �
 > **모든 DB 스키마는 예외 없이 Alembic 마이그레이션으로만 생성·변경한다.** (architecture.md §11)
 > 스키마의 단일 진실 공급원(SSOT)은 마이그레이션 히스토리다. dev/스테이징/운영 동일.
 
-## 워크플로 (PowerShell, backend 디렉토리에서)
+## 워크플로 (backend 디렉토리에서)
+
+```bash
+# macOS / Linux
+cd backend
+./.venv/bin/python -m alembic revision --autogenerate -m "<변경 요약>"   # 초안 생성
+# → versions/*.py 를 반드시 검토·수정 (autogenerate는 초안일 뿐!)
+./.venv/bin/python -m alembic upgrade head                               # 적용
+```
 
 ```powershell
+# Windows
 cd backend
-.\.venv\Scripts\python -m alembic revision --autogenerate -m "<변경 요약>"   # 초안 생성
-# → versions/*.py 를 반드시 검토·수정 (autogenerate는 초안일 뿐!)
-.\.venv\Scripts\python -m alembic upgrade head                               # 적용
+.\.venv\Scripts\python -m alembic revision --autogenerate -m "<변경 요약>"
+.\.venv\Scripts\python -m alembic upgrade head
 ```
 
 ## 체크리스트

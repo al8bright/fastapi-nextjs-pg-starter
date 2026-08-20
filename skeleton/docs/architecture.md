@@ -232,7 +232,7 @@ class Settings(BaseSettings):
     database_url: str | None = None
 
     # JWT
-    secret_key: str = "change-me-in-production"
+    secret_key: str = DEFAULT_SECRET_KEY  # "change-me-in-production-use-32-bytes"
     access_token_expire_minutes: int = 30
 
     # CORS
@@ -752,7 +752,7 @@ export function safeRedirect(value: unknown): string {
 ```ts
 // middleware.ts — 쿠키 검사 후 /login?next=<원래경로>
 import { NextResponse, type NextRequest } from "next/server"
-import { SESSION_COOKIE } from "@/lib/session"
+import { SESSION_COOKIE } from "@/lib/session-cookie"  // ⛔ lib/session 이 아니다 — Edge 번들 오염 방지
 
 export function middleware(request: NextRequest) {
   if (request.cookies.has(SESSION_COOKIE)) return NextResponse.next()
@@ -768,7 +768,7 @@ export const config = {
   // ⚠️ /login·정적 자산을 빼지 않으면 무한 리다이렉트다(/login 요청 → 쿠키 없음 → /login → …).
   //    login = 로그인 화면 자신, _next/static|image = 빌드 산출물·이미지 최적화,
   //    `.*\.` = favicon.ico 처럼 확장자가 있는 public 정적 파일.
-  matcher: ["/((?!login|_next/static|_next/image|.*\\.).*)"],
+  matcher: ["/((?!login(?:/|$)|_next/|.*\\.(?:ico|png|jpg|jpeg|gif|svg|webp|avif|css|js|map|txt|xml|json|webmanifest|woff2?)$).*)"],
 }
 ```
 
@@ -882,10 +882,11 @@ import "./globals.css"
 | 키 | 용도 |
 |----|------|
 | `DATABASE_URL` | PostgreSQL 연결 — 단일 지원(개별 `DB_*` 키 미지원), 미설정 시 기동에서 fail-fast |
-| `SECRET_KEY` / `JWT_*` | 토큰 서명, 만료 |
+| `SECRET_KEY`, `ACCESS_TOKEN_EXPIRE_MINUTES` | 토큰 서명키, 만료(분) |
 | `CORS_ORIGINS` | 콤마 구분 허용 출처 |
 | `FRONTEND_URL`, `BACKEND_PUBLIC_URL` | 리다이렉트/콜백 |
-| `SEED_DEFAULT_ADMIN`, `DEFAULT_ADMIN_PASSWORD` | 기동 시 기본 관리자(admin) 시드 여부·초기 비밀번호 — 운영에서는 끄거나 변경(§21 배포 전 체크리스트) |
+| `APP_ENV` | `production` 이면 안전하지 않은 기본값(기본 `SECRET_KEY`, 관리자 시드)으로 기동을 거부한다 |
+| `SEED_DEFAULT_ADMIN`, `DEFAULT_ADMIN_PASSWORD` | 기동 시 기본 관리자(admin) 시드 여부·초기 비밀번호. **코드 기본값은 꺼짐** — `.env` 에서만 켠다(§21) |
 | `OAUTH_*` | SSO 도입 시(authorize/token/userinfo URL, client id/secret, redirect uri) |
 | `TZ` | Unix 실행 환경 `Asia/Seoul`; Windows에서는 OS 시각대를 서울(UTC+9)로 설정 |
 
@@ -1019,8 +1020,9 @@ gh pr merge --squash --delete-branch
 
 skeleton 은 개발 편의를 위해 기본 관리자 계정을 자동 시드하고 로그인 화면에 안내한다. **운영 배포 전 반드시 제거·변경한다.**
 
-- [ ] `SECRET_KEY` 를 무작위 값으로 교체 — 기본값(`change-me-in-production`)이면 기동 시 경고 로그가 남고 토큰 위조가 가능하다
+- [ ] `SECRET_KEY` 를 무작위 값으로 교체 — 기본값(`change-me-in-production-use-32-bytes`)이면 개발에서는 경고, `APP_ENV=production` 에서는 **기동 실패**다 (공개된 키라 토큰 위조가 가능하다)
 - [ ] 배포 대상의 KST 설정 확인 — Unix는 `backend/.env` 또는 런타임 환경변수의 `TZ=Asia/Seoul`과 `tzset()` 적용, Windows는 OS 시각대 `서울`(UTC+9) 설정 및 애플리케이션 경고 부재 확인 (§10, §17)
-- [ ] 기본 관리자 시드 정리 — 운영 `backend/.env`에서 `SEED_DEFAULT_ADMIN=false`로 끄거나, `DEFAULT_ADMIN_PASSWORD`로 초기 비밀번호를 주입하고 첫 로그인 후 즉시 변경 (§17)
-- [ ] 로그인 화면의 기본 계정 안내 문구 제거 — `frontend/app/login/page.tsx` 의 "admin / admin123" 표시
+- [ ] `APP_ENV=production` 설정 — 기본 `SECRET_KEY` 나 관리자 시드가 켜져 있으면 기동이 실패한다 (§17)
+- [ ] 기본 관리자 시드 정리 — 운영 `backend/.env`에서 `SEED_DEFAULT_ADMIN=false` (§17)
+- [ ] 로그인 화면의 개발용 안내 문구 확인 — `frontend/components/LoginForm.tsx` 의 안내는 `NODE_ENV !== "production"` 에서만 렌더되므로 프로덕션 빌드에서는 자동으로 빠진다
 - [ ] 세션 쿠키가 운영에서 `secure: true` 로 나가는지 확인 — HTTPS 종단 뒤에 배치하고 `NODE_ENV=production` 으로 기동 (§14)

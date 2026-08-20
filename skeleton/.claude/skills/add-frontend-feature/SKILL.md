@@ -158,7 +158,7 @@ description: __PROJECT_NAME__ 프론트엔드(Next.js App Router)에 기능·페
    export const config = {
      //          login = 로그인 화면 자신 · _next/static|image = 빌드 산출물·이미지 최적화
      //          `.*\.` = favicon.ico 처럼 확장자가 있는 public 정적 파일
-     matcher: ["/((?!login|_next/static|_next/image|.*\\.).*)"],
+     matcher: ["/((?!login(?:/|$)|_next/|.*\\.(?:ico|png|jpg|jpeg|gif|svg|webp|avif|css|js|map|txt|xml|json|webmanifest|woff2?)$).*)"],
    }
    ```
    - 공개 페이지를 늘리려면 이 정규식의 제외 목록에 추가한다(예: `(?!login|signup|_next/…)`). ⛔ 보호 경로를 나열하는 방식으로 바꾸면 새 라우트가 조용히 무방비가 된다.

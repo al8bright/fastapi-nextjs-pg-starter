@@ -8,7 +8,7 @@ description: __PROJECT_NAME__ 의 고정 스택 버전과 버전별 주의사항
 ## 1. 정확한 버전의 출처 (SSOT) — 항상 여기서 확인
 - **런타임 최소**: `scripts/versions.env`
 - **백엔드**: `backend/requirements.txt` (`==` 정확 핀)
-- **프론트**: `frontend/package.json` (`^`/`~` 범위)
+- **프론트**: `frontend/package.json` (런타임 4종은 `==` 정확 고정, TypeScript 는 `~`, 그 외 도구는 `^`) + `frontend/pnpm-lock.yaml` (실제 해석 버전 — 커밋 대상)
 
 > ⛔ **패키지 버전을 이 파일에 복사해 두지 않는다.** 값을 세 곳(SSOT·README·이 스킬)에 두면 반드시 드리프트가 난다. 값이 필요하면 위 파일을 읽는다.
 
@@ -19,10 +19,10 @@ description: __PROJECT_NAME__ 의 고정 스택 버전과 버전별 주의사항
 | 런타임 하한 | 이상이면 기존 설치본 재사용 | Python `≥3.13` · Node `≥24` · pnpm `≥11` | `scripts/versions.env` |
 | 런타임 설치 핀 | pyenv·fnm·corepack 이 설치·활성화 | `.python-version`(정확) · `.nvmrc`(major) · `packageManager`(정확) | 각 파일 |
 | 백엔드 | `==` **정확 고정** — 재현성 우선 | 13개 | `backend/requirements.txt` |
-| 프론트 | `^` 범위 (TypeScript 만 `~`) | Next·React·Tailwind v4 + 린트/테스트 도구 | `frontend/package.json` |
+| 프론트 | next·react·react-dom·eslint-config-next 는 `==`, TypeScript 는 `~`, 그 외 도구는 `^` | Next·React·Tailwind v4 + 린트/테스트 도구 | `frontend/package.json` + `pnpm-lock.yaml` |
 | PostgreSQL | 고정 없음 | 14+ 권장, CI 는 `postgres:16` | — |
 
-패키지별 전체 목록과 각각의 고정 값·범위는 **`README.md` 의 "기술 스택과 버전"** 절에 표로 있다. 버전을 확인해야 하면 그 표나 SSOT 파일을 읽는다.
+패키지별 **전체** 목록은 `frontend/package.json` 과 `pnpm-lock.yaml` 이 유일한 출처다. `README.md` 의 "기술 스택과 버전" 표는 주요 항목만 추린 요약이다.
 
 주의할 표기 두 가지 — `^0.x` 는 minor 까지 고정된다(`^0.5.3` = `>=0.5.3 <0.6.0`). 0.x 대 패키지를 추가할 땐 이 점을 의식하고 핀한다. TypeScript 만 `~` 인 이유는 minor 상승이 타입 검사 동작을 바꿔 빌드를 깨뜨릴 수 있어서다.
 
@@ -60,7 +60,7 @@ description: __PROJECT_NAME__ 의 고정 스택 버전과 버전별 주의사항
 - 인증 가드는 루트 `middleware.ts` 한 곳이다. `export const config = { matcher: [...] }` 로 대상을 정하고, 세션 쿠키가 없으면 `/login?next=<pathname+search>` 로 보낸다(쿠키 **존재만** 확인 — 서명·만료 검증은 FastAPI 몫이다).
 - ⛔ **matcher 에서 `/login` 과 정적 자산을 제외하지 않으면 무한 리다이렉트**가 난다(로그인 페이지 자체가 다시 가드에 걸린다). 스켈레톤의 실제 값은 **제외 목록**이다:
   ```ts
-  matcher: ["/((?!login|_next/static|_next/image|.*\\.).*)"]
+  matcher: ["/((?!login(?:/|$)|_next/|.*\\.(?:ico|png|jpg|jpeg|gif|svg|webp|avif|css|js|map|txt|xml|json|webmanifest|woff2?)$).*)"]
   ```
   `login`(로그인 화면) · `_next/static`·`_next/image`(빌드 산출물·이미지 최적화) · `.*\.`(favicon.ico 처럼 **확장자가 있는** public 정적 파일)을 빼놓은 것이다. 공개 경로를 늘릴 땐 이 제외 목록에 더한다 — ⛔ 보호 경로를 나열하는 방식으로 바꾸면 새 라우트가 조용히 무방비가 된다.
 - ⚠️ **오픈 리다이렉트 방지**: `next` 파라미터를 그대로 `redirect()` 에 넣으면 외부 사이트로 유도할 수 있다. `lib/safe-redirect.ts` 로 **내부 경로만** 통과시킨다 — `/` 로 시작(이것만으로 `https:`·`javascript:` 스킴이 걸러진다)하고, 두 번째 문자가 `/`·`\` 가 아니며, 백슬래시·공백·제어문자가 없고, `/login` 자신이 아닌 것만. 그 외에는 `/` 로 떨어뜨리고(query·hash 는 보존), **이 검증 함수에는 테스트를 붙인다**(`lib/safe-redirect.test.ts`).
@@ -99,8 +99,13 @@ description: __PROJECT_NAME__ 의 고정 스택 버전과 버전별 주의사항
 
 ## 5. 업그레이드 검증 절차 (필수)
 버전을 올릴 땐 추측 금지 — **임시 스캐폴드로 실제 검증한 뒤** 핀을 고정한다:
-1. `scaffold.ps1 -Name tmp -Target <스크래치경로> -SkipDb -SkipInstall -NoDesign`
-2. 백엔드: `python -m venv .venv` → `pip install -r requirements.txt` → `ruff check .` → `pytest -q`
+1. **템플릿 리포**(`fastapi-nextjs-pg-starter`)를 clone 한 곳에서 임시 스캐폴드를 만든다 —
+   ⚠️ `scaffold.sh`/`scaffold.ps1` 은 템플릿 리포 루트에만 있고 **생성 프로젝트에는 복사되지 않는다**.
+   - macOS/Linux: `./scaffold.sh --name tmp --target <스크래치경로> --skip-db --skip-install --no-design`
+   - Windows: `.\scaffold.ps1 -Name tmp -Target <스크래치경로> -SkipDb -SkipInstall -NoDesign`
+2. 백엔드: `python3 -m venv .venv` → `./.venv/bin/python -m pip install -r requirements.txt` → `./.venv/bin/python -m ruff check .` → `./.venv/bin/python -m pytest -q`
+   - ⚠️ venv 를 만든 뒤 **venv 의 인터프리터를 명시**한다. 활성화 없이 `pip` 을 부르면 전역 pip 이 돈다.
+   - Windows 는 `.\.venv\Scripts\python` 으로 바꿔 읽는다.
 3. 프론트: `pnpm install` → `pnpm lint` → `pnpm typecheck` → `pnpm test` → `pnpm build`
    - ⚠️ 서버/클라이언트 경계 위반(서버 전용 모듈 유출 등)은 **`pnpm build` 에서야 드러난다.** 앞 단계가 통과했다고 건너뛰지 말 것.
 4. 통과 시 핀 고정 후 **갱신할 곳을 모두**: SSOT 파일(`requirements.txt` 또는 `package.json` + `pnpm-lock.yaml`) + `README.md` 의 "기술 스택과 버전" 표 + 필요 시 `docs/architecture.md` + **이 스킬의 §3 버전별 함정**. 커밋은 [pr-workflow].

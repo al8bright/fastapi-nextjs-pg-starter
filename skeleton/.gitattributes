@@ -1,6 +1,9 @@
 # OS 무관하게 줄바꿈을 LF로 통일 (.env 등 설정 파일이 OS별로 갈라지지 않게)
 * text=auto eol=lf
 
+# 셸 스크립트는 반드시 LF — CRLF 면 셰뱅이 깨져 실행 자체가 안 된다
+*.sh text eol=lf
+
 # 윈도우 배치/PowerShell 스크립트는 CRLF 유지
 *.bat text eol=crlf
 *.cmd text eol=crlf
