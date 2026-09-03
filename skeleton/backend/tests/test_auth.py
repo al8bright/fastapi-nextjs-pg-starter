@@ -1,6 +1,7 @@
 """인증 유저플로우 테스트 (architecture.md §12)."""
 import time
 
+import jwt
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -10,17 +11,23 @@ from app.config import get_settings
 from app.core.security import BCRYPT_MAX_PASSWORD_BYTES, create_token, hash_password, verify_password
 from app.dependencies import get_db, require_admin
 from app.main import app
-from app.services import user_service
+from app.services import session_service, user_service
 from app.services.exceptions import ServiceError
 
 
-def _issue_token(subject: str, *, expires_minutes: int = 5, token_type: str = "access") -> str:
+def _issue_token(subject: str, *, session_id: int, expires_minutes: int = 5) -> str:
     return create_token(
         subject=subject,
+        session_id=session_id,
         secret=get_settings().secret_key,
         expires_minutes=expires_minutes,
-        token_type=token_type,
     )
+
+
+def _session_for(db_session, user) -> int:
+    """직접 발급하는 토큰 테스트용 — 살아 있는 세션 행을 만들고 id 를 반환한다."""
+    session, _ = session_service.create_session(db_session, user_id=user.id)
+    return session.id
 
 
 def test_ensure_admin_seeds_default_admin(db_session):
@@ -200,16 +207,39 @@ def test_me_without_token_401(client):
 def test_me_expired_token_401(client, db_session):
     user_service.ensure_admin(db_session, password=get_settings().default_admin_password)
     admin = user_service.get_by_username(db_session, "admin")
-    token = _issue_token(str(admin.id), expires_minutes=-1)
+    token = _issue_token(str(admin.id), session_id=_session_for(db_session, admin), expires_minutes=-1)
     res = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 401
 
 
-def test_me_refresh_token_401(client, db_session):
-    # decode_access_token 은 typ != "access" 토큰을 거부해야 한다.
+def test_me_non_access_typ_token_401(client, db_session):
+    # decode_access_token 은 typ != "access" 토큰을 거부해야 한다. refresh 토큰은 이제 JWT 가
+    # 아니므로(불투명 토큰) 위조 typ 클레임을 직접 서명해 검증 경로를 고정한다.
     user_service.ensure_admin(db_session, password=get_settings().default_admin_password)
     admin = user_service.get_by_username(db_session, "admin")
-    token = _issue_token(str(admin.id), token_type="refresh")
+    payload = {
+        "sub": str(admin.id),
+        "sid": _session_for(db_session, admin),
+        "iat": int(time.time()),
+        "exp": int(time.time()) + 300,
+        "typ": "refresh",
+    }
+    token = jwt.encode(payload, get_settings().secret_key, algorithm="HS256")
+    res = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 401
+
+
+def test_me_token_without_sid_401(client, db_session):
+    # sid 없는 토큰은 세션 폐기 검사를 우회하므로 서명이 유효해도 거부해야 한다.
+    user_service.ensure_admin(db_session, password=get_settings().default_admin_password)
+    admin = user_service.get_by_username(db_session, "admin")
+    payload = {
+        "sub": str(admin.id),
+        "iat": int(time.time()),
+        "exp": int(time.time()) + 300,
+        "typ": "access",
+    }
+    token = jwt.encode(payload, get_settings().secret_key, algorithm="HS256")
     res = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 401
 
@@ -220,6 +250,7 @@ def test_me_tampered_token_401(client, db_session):
     admin = user_service.get_by_username(db_session, "admin")
     forged = create_token(
         subject=str(admin.id),
+        session_id=_session_for(db_session, admin),
         secret="wrong-secret-key-of-sufficient-length-123456",
         expires_minutes=5,
     )
@@ -228,7 +259,7 @@ def test_me_tampered_token_401(client, db_session):
 
 
 def test_me_nonexistent_user_id_token_401(client, db_session):
-    token = _issue_token("999999")
+    token = _issue_token("999999", session_id=999999)
     res = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 401
 
@@ -236,15 +267,17 @@ def test_me_nonexistent_user_id_token_401(client, db_session):
 def test_me_deactivated_after_token_issued_401(client, db_session):
     user_service.ensure_admin(db_session, password=get_settings().default_admin_password)
     admin = user_service.get_by_username(db_session, "admin")
-    token = _issue_token(str(admin.id))
+    token = _issue_token(str(admin.id), session_id=_session_for(db_session, admin))
     admin.is_active = False
     db_session.commit()
     res = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 401
 
 
-def test_me_non_numeric_subject_401(client):
-    token = _issue_token("not-a-number")
+def test_me_non_numeric_subject_401(client, db_session):
+    # 세션(sid)이 살아 있어도 sub 가 사용자 id 형식이 아니면 거부해야 한다.
+    user = user_service.create_user(db_session, username="subject", password="pw123456")
+    token = _issue_token("not-a-number", session_id=_session_for(db_session, user))
     res = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 401
 

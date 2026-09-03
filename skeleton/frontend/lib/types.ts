@@ -11,10 +11,16 @@ export interface User {
   is_active: boolean
 }
 
-/** backend: TokenResponse */
+/** backend: TokenResponse — /auth/login·/auth/refresh 가 같은 형태를 돌려준다(회전된 새 쌍). */
 export interface TokenResponse {
   access_token: string
+  /** 불투명 문자열 — 프론트는 해석하지 않고 쿠키에 담아 /auth/refresh 로 되돌려 보내기만 한다. */
+  refresh_token: string
   token_type: string
+  /** access 토큰 유효 초 (기본 15분). 쿠키 maxAge 계산에 쓴다 — lib/session-cookie.ts 참고. */
+  expires_in: number
+  /** refresh 토큰 유효 초 (기본 14일). */
+  refresh_expires_in: number
 }
 
 /** backend: DbHealth (GET /api/v1/health/db) */

@@ -505,7 +505,7 @@ Write-Step ".env 생성 (OS 무관 주입 — architecture.md §5)"
 $backendEnv = @"
 DATABASE_URL=$databaseUrl
 SECRET_KEY=$secret
-ACCESS_TOKEN_EXPIRE_MINUTES=30
+ACCESS_TOKEN_EXPIRE_MINUTES=15
 CORS_ORIGINS=http://localhost:3000
 FRONTEND_URL=http://localhost:3000
 BACKEND_PUBLIC_URL=http://localhost:8000

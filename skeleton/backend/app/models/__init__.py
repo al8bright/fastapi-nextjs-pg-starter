@@ -3,6 +3,7 @@
 Alembic env.py 와 lifespan 에서 `import app.models` 만으로 전체 모델이 로드되도록 한다.
 """
 from app.models.app_meta import AppMeta
+from app.models.auth_session import AuthSession, LoginThrottle
 from app.models.user import User, UserRole
 
-__all__ = ["AppMeta", "User", "UserRole"]
+__all__ = ["AppMeta", "AuthSession", "LoginThrottle", "User", "UserRole"]

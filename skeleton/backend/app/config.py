@@ -35,9 +35,14 @@ class Settings(BaseSettings):
     # DB
     database_url: str | None = None
 
-    # JWT
+    # JWT / 세션 — access 는 짧게(탈취 창 축소), 갱신은 DB 세션 기반 refresh 토큰이 담당한다.
     secret_key: str = DEFAULT_SECRET_KEY
-    access_token_expire_minutes: int = 30
+    access_token_expire_minutes: int = 15
+    refresh_token_expire_days: int = 14
+
+    # 로그인 시도 제한 — 계정별 연속 실패가 max 이상이면 lockout 분 동안 429 로 거부한다.
+    login_max_failures: int = 5
+    login_lockout_minutes: int = 15
 
     # 시각대 (architecture.md §10 KST 단일 기준)
     tz: str = "Asia/Seoul"

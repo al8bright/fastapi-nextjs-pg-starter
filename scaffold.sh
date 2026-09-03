@@ -379,15 +379,23 @@ _urlenc() {
     || printf '%s' "$1"
 }
 DATABASE_URL="postgresql+psycopg2://${DB_USER}:$(_urlenc "$DB_PASSWORD")@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+# SECRET_KEY 는 JWT 서명키이므로 반드시 암호학적 난수여야 한다.
+# ⛔ 타임스탬프 폴백(change-me-<epoch>)은 생성 시각만 추측하면 서명키가 복원되어 토큰 위조로
+#    직결된다 — 난수를 만들 수 없으면 약한 키로 진행하지 말고 즉시 중단한다.
 if command -v openssl >/dev/null 2>&1; then SECRET=$(openssl rand -hex 24)
 elif command -v python3 >/dev/null 2>&1; then SECRET=$(python3 -c 'import secrets;print(secrets.token_hex(24))')
-else SECRET="change-me-$(date +%s)"; fi
+else
+  echo "SECRET_KEY 를 생성할 수 없습니다: openssl 또는 python3 가 필요합니다." >&2
+  echo "  둘 중 하나를 설치한 뒤 다시 실행하세요 (JWT 서명키는 암호학적 난수여야 합니다)." >&2
+  exit 1
+fi
 
 # 초기 관리자 비밀번호도 무작위로 생성한다.
 # ⛔ 하드코딩된 기본값(admin123)을 쓰면 이 템플릿으로 만든 모든 프로젝트가 같은 자격증명을 갖는다.
+#    타임스탬프 폴백(admin-<epoch>)도 같은 이유로 두지 않는다 — 위 SECRET 생성에서 openssl/python3
+#    부재 시 이미 중단했으므로 여기서는 둘 중 하나가 반드시 존재한다.
 if command -v openssl >/dev/null 2>&1; then SEED_ADMIN_PW=$(openssl rand -base64 12 | tr -d '/+=' | cut -c1-16)
-elif command -v python3 >/dev/null 2>&1; then SEED_ADMIN_PW=$(python3 -c 'import secrets;print(secrets.token_urlsafe(12))')
-else SEED_ADMIN_PW="admin-$(date +%s)"; fi
+else SEED_ADMIN_PW=$(python3 -c 'import secrets;print(secrets.token_urlsafe(12))'); fi
 
 # ---------- 2. 복사 ----------
 step "골격 복사 → $TARGET"
@@ -451,7 +459,7 @@ fi
 cat > "$TARGET/backend/.env" <<EOF || { warn "backend/.env 생성 실패 — 중단합니다"; exit 1; }
 DATABASE_URL=$DATABASE_URL
 SECRET_KEY=$SECRET
-ACCESS_TOKEN_EXPIRE_MINUTES=30
+ACCESS_TOKEN_EXPIRE_MINUTES=15
 CORS_ORIGINS=http://localhost:3000
 FRONTEND_URL=http://localhost:3000
 BACKEND_PUBLIC_URL=http://localhost:8000

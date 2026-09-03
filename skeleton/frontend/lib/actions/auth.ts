@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation"
 import { safeRedirect } from "@/lib/safe-redirect"
 import { fastapiErrorMessage, fastapiFetch } from "@/lib/server/fastapi"
-import { clearSessionToken, setSessionToken } from "@/lib/session"
+import { clearSessionTokens, getRefreshToken, setSessionTokens } from "@/lib/session"
 import type { TokenResponse } from "@/lib/types"
 
 // 인증 Server Action (architecture.md §14).
@@ -21,7 +21,7 @@ export interface LoginState {
 }
 
 /**
- * 로그인. 성공 시 세션 쿠키를 굽고 `next`(검증된 내부 경로)로 리다이렉트한다.
+ * 로그인. 성공 시 access·refresh 세션 쿠키를 굽고 `next`(검증된 내부 경로)로 리다이렉트한다.
  *
  * ⚠️ `redirect()` 는 NEXT_REDIRECT 예외를 던져서 동작한다 — try 블록 안에서 호출하면
  *    catch 가 그 예외를 삼켜 "로그인은 됐는데 화면이 안 넘어가는" 버그가 된다.
@@ -34,13 +34,14 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
   const next = safeRedirect(formData.get("next"))
 
   try {
-    const token = await fastapiFetch<TokenResponse>({
+    const tokens = await fastapiFetch<TokenResponse>({
       path: "/auth/login",
       method: "POST",
       body: { username, password },
     })
-    await setSessionToken(token.access_token)
+    await setSessionTokens(tokens)
   } catch (error) {
+    // 429(시도 제한)도 여기로 온다 — fastapiErrorMessage 가 자격증명 오류와 구분해 문구를 만든다.
     return { error: fastapiErrorMessage(error) }
   }
 
@@ -48,10 +49,26 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
 }
 
 /**
- * 로그아웃. 쿠키만 지우면 끝이다 — 서버 상태 캐시가 없으므로
- * React 판의 endSession(queryClient) 같은 "이전 사용자 데이터 잔존" 문제가 원천적으로 없다.
+ * 로그아웃. 백엔드의 refresh 토큰을 폐기(revoke)한 뒤 두 쿠키를 지운다.
+ *
+ * 백엔드 호출은 **best-effort** 다 — 미기동·네트워크 오류로 로그아웃이 막히면 사용자는
+ * 세션을 끊을 방법이 없어진다. 로그아웃의 본체는 쿠키 삭제이고, 폐기에 실패한 refresh
+ * 토큰은 만료(기본 14일)로 소멸한다. `/auth/logout` 은 멱등(204·인증 불요)이라
+ * 이미 폐기된 토큰을 다시 보내도 안전하다.
  */
 export async function logoutAction(): Promise<void> {
-  await clearSessionToken()
+  const refreshToken = await getRefreshToken()
+  if (refreshToken) {
+    try {
+      await fastapiFetch<void>({
+        path: "/auth/logout",
+        method: "POST",
+        body: { refresh_token: refreshToken },
+      })
+    } catch {
+      // best-effort — 실패해도 쿠키 삭제와 리다이렉트는 진행한다.
+    }
+  }
+  await clearSessionTokens()
   redirect("/login")
 }
