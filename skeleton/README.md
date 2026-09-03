@@ -104,12 +104,12 @@ flowchart LR
 
 ## 인증과 기본 계정
 
-이 프로젝트는 username/password 로그인을 기본 제공한다. FastAPI가 발급한 JWT는 Next가 httpOnly 쿠키에 저장하고, 이후 FastAPI 서버 요청에 Bearer 토큰으로 전달한다. 처음 백엔드를 실행할 때 `admin` 계정이 없으면 개발용 관리자 **`admin`** 이 시드된다. 비밀번호는 스캐폴드가 무작위로 생성해 `backend/.env` 의 `DEFAULT_ADMIN_PASSWORD` 에 넣는다.
+이 프로젝트는 username/password 로그인을 기본 제공한다. FastAPI는 로그인 시 **access JWT(기본 15분)** 와 **DB 세션 기반 refresh 토큰(기본 14일, 불투명 문자열)** 쌍을 발급하고, Next가 이를 httpOnly 쿠키 두 개에 저장한다(운영에서는 `__Host-` 프리픽스). 이후 FastAPI 서버 요청에는 access 토큰을 Bearer로 전달하며, access 쿠키가 만료되면 `middleware.ts`가 refresh 토큰으로 새 쌍을 받아 자동 갱신한다(회전 방식 — 재사용이 감지되면 세션이 폐기된다). 로그아웃은 백엔드에서 refresh 세션을 폐기해 access 토큰도 즉시 무효화한다. 로그인은 계정별 시도 제한(기본 5회 실패 시 15분 잠금, 429)으로 보호되고 보안 이벤트는 `app.audit` 로거에 남는다. 처음 백엔드를 실행할 때 `admin` 계정이 없으면 개발용 관리자 **`admin`** 이 시드된다. 비밀번호는 스캐폴드가 무작위로 생성해 `backend/.env` 의 `DEFAULT_ADMIN_PASSWORD` 에 넣는다.
 
 > [!CAUTION]
 > **시드 관리자는 로컬 개발 전용이다. 배포 전 `APP_ENV=production` 으로 두고 `SECRET_KEY` 를 교체하며 `SEED_DEFAULT_ADMIN=false` 로 끈다 — 두 조건을 어기면 백엔드가 기동을 거부한다.** 전체 항목은 [`docs/architecture.md`의 배포 전 체크리스트](docs/architecture.md#배포-전-체크리스트-스타터-기본값-제거--must)를 확인한다.
 
-`middleware.ts`는 쿠키가 없는 사용자를 `/login`으로 보내고, 로그인 성공 후 검증된 내부 목적지 또는 홈으로 이동시킨다. `users.role`과 백엔드의 `require_admin` 의존성으로 관리자 API를 보호한다.
+`middleware.ts`는 access 쿠키가 없고 refresh 쿠키만 있으면 백엔드로 자동 갱신을 시도하고, 둘 다 없거나 갱신이 401이면 `/login`으로 보낸다. 로그인 성공 후에는 검증된 내부 목적지 또는 홈으로 이동시킨다. `users.role`과 백엔드의 `require_admin` 의존성으로 관리자 API를 보호한다. 프론트는 전 경로에 보안 응답 헤더(CSP, `X-Frame-Options: DENY`, nosniff, Referrer-Policy, Permissions-Policy, 운영 HSTS)를 내보낸다(`next.config.ts`).
 
 ```mermaid
 sequenceDiagram
@@ -123,29 +123,38 @@ sequenceDiagram
     User->>UI: 아이디와 비밀번호 제출
     UI->>Next: 로그인 Server Action
     Next->>API: POST /api/v1/auth/login
-    API->>DB: 사용자 조회와 비밀번호 검증
+    API->>DB: 사용자 조회, 비밀번호 검증, 시도 제한 확인
     alt 로그인 성공
-        DB-->>API: 활성 사용자
-        API-->>Next: access JWT
-        Next->>Cookie: JWT 저장
+        DB-->>API: 활성 사용자와 refresh 세션 생성
+        API-->>Next: access JWT + refresh 토큰
+        Next->>Cookie: access·refresh 쿠키 2개 저장
         Next-->>UI: 원래 목적지 또는 홈으로 이동
         UI->>Next: 보호 화면 요청과 쿠키
-        Next->>Cookie: JWT 읽기
-        Next->>API: Bearer 토큰과 서버 fetch
-        alt 토큰 유효
+        Next->>Cookie: access 토큰 읽기
+        alt access 쿠키 만료(부재)·refresh 보유
+            Next->>API: POST /api/v1/auth/refresh
+            API->>DB: 세션 검증과 토큰 회전
+            API-->>Next: 회전된 새 토큰 쌍
+            Next->>Cookie: 두 쿠키 교체 후 통과
+        end
+        Next->>API: Bearer access 토큰과 서버 fetch
+        alt 토큰과 세션 유효
             API-->>Next: 보호 데이터
             Next-->>UI: 서버 컴포넌트 화면
-        else 토큰 만료 또는 무효
+        else 토큰 무효 또는 세션 폐기
             API-->>Next: 401
-            Next->>Cookie: 쿠키 제거
             Next-->>UI: 로그인 화면으로 이동
         end
-    else 로그인 실패
-        API-->>Next: 401
-        Next->>Cookie: 저장 쿠키 제거
+    else 로그인 실패(401) 또는 잠금(429)
+        API-->>Next: 401 또는 429
         Next-->>UI: 로그인 오류 유지
-        UI-->>User: 자격증명 오류 표시
+        UI-->>User: 원인별 오류 표시
     end
+    User->>UI: 로그아웃 선택
+    UI->>Next: 로그아웃 Server Action
+    Next->>API: POST /api/v1/auth/logout (refresh 폐기, best-effort)
+    Next->>Cookie: 두 쿠키 삭제
+    Next-->>UI: 로그인 화면으로 이동
 ```
 
 ## 프로젝트 구조와 API 확장
@@ -242,7 +251,7 @@ pnpm test
 pnpm build
 ```
 
-`.github/workflows/ci.yml`은 push와 `main` 대상 PR에서 백엔드의 ruff → pytest(Ubuntu·Windows 매트릭스), Alembic 검증(`migrations` — 서비스 컨테이너가 Linux 러너에서만 뜨므로 Ubuntu 전용), `.ps1` 구문 검사(`powershell-syntax` — Windows PowerShell 5.1), 프론트엔드의 ESLint → typecheck → test(Vitest) → build를 실행한다.
+`.github/workflows/ci.yml`은 push와 `main` 대상 PR에서 백엔드의 ruff → pytest(Ubuntu·Windows 매트릭스), Alembic 검증(`migrations` — 서비스 컨테이너가 Linux 러너에서만 뜨므로 Ubuntu 전용), `.ps1` 구문 검사(`powershell-syntax` — Windows PowerShell 5.1), 프론트엔드의 ESLint → typecheck → test(Vitest) → build를 실행한다. 의존성 취약점 스캔(`backend-audit`의 pip-audit, `frontend-audit`의 `pnpm audit --prod`)은 경고성 잡이다 — 실패해도 워크플로는 초록이므로 로그의 경고 표시를 주기적으로 확인한다.
 
 ## 환경 설정
 

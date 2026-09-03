@@ -152,7 +152,7 @@ description: __PROJECT_NAME__ 프론트엔드(Next.js App Router)에 기능·페
 
 5. **보호 라우트** `frontend/middleware.ts`
    - matcher 는 **제외 목록(negative lookahead)** 이다 — 새 라우트는 기본적으로 보호된다. 페이지마다 가드를 손으로 넣지 않는다.
-   - 세션 쿠키(`__PROJECT_SNAKE___session`)의 **존재만** 확인하고, 없으면 `/login?next=<pathname+search>` 로 보낸다. 서명 검증·만료 확인은 하지 않는다(실제 판정은 FastAPI 가 한다, §14).
+   - access 쿠키(`SESSION_COOKIE`)의 **존재만** 확인하고 통과시킨다. 서명 검증·만료 확인은 하지 않는다(실제 판정은 FastAPI 가 한다, §14). access 가 없고 refresh 쿠키(`REFRESH_COOKIE`)만 있으면 백엔드 `/auth/refresh` 로 **자동 갱신**하고(성공 시 두 쿠키 교체 후 통과, 401 이면 쿠키 파기), 둘 다 없으면 `/login?next=<pathname+search>` 로 보낸다. ⛔ 이 refresh 로직을 페이지·액션에 복제하지 마라 — middleware 한 곳이다.
    - ⛔ matcher 에서 `/login`·`_next/static`·`_next/image`·**확장자가 있는 정적 파일**을 빼지 않으면 무한 리다이렉트다(`/login` 요청 → 쿠키 없음 → `/login` → …).
    ```ts
    export const config = {
@@ -165,34 +165,33 @@ description: __PROJECT_NAME__ 프론트엔드(Next.js App Router)에 기능·페
    - ⚠️ **오픈 리다이렉트 방지**: `next` 파라미터는 그대로 쓰면 취약점이 된다. `safeRedirect()` 로 **내부 경로만** 통과시킨다 — `/` 로 시작(이것만으로 `https:`·`javascript:` 가 걸러진다)하고, 두 번째 문자가 `/`·`\` 가 아니며, 백슬래시·공백·제어문자가 없고, `/login` 자신이 아닌 것만. 그 밖에는 `/` 로 떨어뜨린다(query·hash 는 보존). 이 검증 함수에는 **테스트를 반드시 붙인다.**
 
 6. **테스트** `frontend/` — Vitest (`pnpm test`)
-   - 대상 파일 옆에 `*.test.ts(x)`(`vitest.config.ts` 의 include 는 `{app,components,lib}/**/*.test.{ts,tsx}`). 우선순위는 **`lib/` 의 순수 함수**(특히 `safe-redirect`, 에러 메시지 매핑, 타입 가드)와 **클라이언트 컴포넌트**(폼이 Action 에 넘기는 FormData, 오류 표시, 대기 중 비활성)다. 스켈레톤의 예시는 `lib/safe-redirect.test.ts` 와 `components/LoginForm.test.tsx` 둘뿐이다.
+   - 대상 파일 옆에 `*.test.ts(x)`(`vitest.config.ts` 의 include 는 `{app,components,lib}/**/*.test.{ts,tsx}`). 우선순위는 **`lib/` 의 순수 함수**(특히 `safe-redirect`, 에러 메시지 매핑, 타입 가드)와 **클라이언트 컴포넌트**(폼이 Action 에 넘기는 FormData, 오류 표시, 대기 중 비활성)다. 스켈레톤의 예시는 `lib/safe-redirect.test.ts`·`lib/session-cookie.test.ts`·`lib/fastapi-error.test.ts`(순수 함수)와 `components/LoginForm.test.tsx`(클라이언트 폼) 네 개다.
    - ⛔ `lib/server/*`·`lib/session.ts`·`lib/actions/*` 는 `server-only` 를 끌고 와 러너에서 **로드조차 되지 않는다.** 클라이언트 컴포넌트 테스트는 Action 모듈을 통째로 `vi.mock` 해서 끊는다(`vi.mock("@/lib/actions/auth", …)`).
    - ⚠️ **서버 컴포넌트와 Server Action 은 러너 밖의 Next 런타임(요청 컨텍스트·`cookies()`·캐시)에 의존한다.** **억지로 테스트를 만들지 마라** — 무리하게 모킹한 테스트는 구현을 고정할 뿐 회귀를 못 잡는다. 대신 로직을 순수 함수로 뽑아 그것을 테스트하고, 통합 확인은 `pnpm build` + 수동 동작 확인으로 대신한다.
    - `tsc --noEmit`·`eslint` 가 못 잡는 **런타임 동작**을 고정한다 — §14 가 ⛔ 로 규정한 것들 중 **러너에서 검증 가능한 것**(오픈 리다이렉트 통과, 복귀 경로의 query 보존, 로그인 실패 문구 표시)이 1순위다. 미인증 접근 차단은 middleware 몫이라 여기서 덮지 못한다 — `pnpm build` 후 수동으로 확인한다.
 
 ## 인증/세션 (§14)
 
-- 세션은 **httpOnly 쿠키** `__PROJECT_SNAKE___session` 하나뿐이다. ⛔ `localStorage`·전역 스토어에 토큰을 복제하지 마라 — 클라이언트에서는 읽을 수 없는 게 정상이다.
-- 쿠키 read/set/clear 는 `lib/session.ts` 한 경로로만. 쓰기(set/delete)는 **Server Action·Route Handler 안에서만** 가능하다(서버 컴포넌트 렌더 중에는 예외가 난다).
+- 세션은 **httpOnly 쿠키 2개**다 — access `SESSION_COOKIE`(`<project>_session`) + refresh `REFRESH_COOKIE`(`<project>_refresh`). production 은 `__Host-` 프리픽스가 붙는다. ⛔ `localStorage`·전역 스토어에 토큰을 복제하지 마라 — 클라이언트에서는 읽을 수 없는 게 정상이다.
+- 쿠키 이름·속성·maxAge 계산은 **의존성 0 인 `lib/session-cookie.ts`** 한 곳에서만 만든다(middleware/Edge 와 공유 — ⛔ 이 파일에 import 를 추가하지 마라). read/set/clear 는 `lib/session.ts` 한 경로로만. 쓰기(set/clear)는 **Server Action·Route Handler 안에서만** 가능하다(서버 컴포넌트 렌더 중에는 예외가 난다).
 - **`cookies()` 는 async 다** — `await` 한 store 에서 읽고 쓴다.
   ```ts
-  // lib/session.ts
+  // lib/session.ts (요약)
   import "server-only"
   import { cookies } from "next/headers"
-
-  export const SESSION_COOKIE = "__PROJECT_SNAKE___session"
+  import { REFRESH_COOKIE, SESSION_COOKIE } from "@/lib/session-cookie"
 
   export async function getSessionToken(): Promise<string | null> {
     const store = await cookies()
     return store.get(SESSION_COOKIE)?.value ?? null
   }
   ```
-- 쿠키 속성은 `httpOnly` · `sameSite: "lax"` · `path: "/"` · `maxAge`(백엔드 `ACCESS_TOKEN_EXPIRE_MINUTES` 와 **수동 동기화** — `TokenResponse` 에 `expires_in` 이 없다) · **`secure` 는 production 에서만**이다. ⚠️ localhost(http)에서 `secure` 를 켜면 쿠키가 저장되지 않아 **로그인이 무한 루프**가 된다.
-- 로그인: `LoginForm`(클라) → `loginAction` → `POST /auth/login`(JSON) → 응답의 `access_token` 을 httpOnly 쿠키에 저장 → `redirect(safeRedirect(next))` 로 원래 위치(없으면 `/`) 이동.
-- 로그아웃: `LogoutButton`(클라) → `logoutAction` → 쿠키 삭제 → `/login` 이동. ⛔ 클라이언트에서 쿠키를 지우려 하지 마라(httpOnly 라 불가능하다).
+- 쿠키 속성은 `httpOnly` · `sameSite: "lax"` · `path: "/"` · **`secure` 는 production 에서만**이다. ⚠️ localhost(http)에서 `secure` 를 켜면 쿠키가 저장되지 않아 **로그인이 무한 루프**가 된다. maxAge 는 백엔드 `TokenResponse` 값으로 **자동 동기화**된다 — access 는 `expires_in − 60초`(쿠키가 토큰보다 먼저 죽어야 middleware 가 만료를 선제 감지한다), refresh 는 `refresh_expires_in`. 삭제는 `delete()` 가 아니라 **같은 속성으로 `maxAge: 0` 덮어쓰기**다(`__Host-` 조건, `clearSessionTokens`).
+- 로그인: `LoginForm`(클라) → `loginAction` → `POST /auth/login`(JSON) → 응답의 access·refresh 를 `setSessionTokens()` 로 두 쿠키에 저장 → `redirect(safeRedirect(next))` 로 원래 위치(없으면 `/`) 이동.
+- 로그아웃: `LogoutButton`(클라) → `logoutAction` → 백엔드 `POST /auth/logout` 으로 refresh 폐기(**best-effort** — 멱등 204·인증 불요) → `clearSessionTokens()` 로 두 쿠키 삭제 → `/login` 이동. ⛔ 클라이언트에서 쿠키를 지우려 하지 마라(httpOnly 라 불가능하다).
 - 사용자 정보는 **필요한 화면의 서버 컴포넌트에서 `getSessionUser("<현재경로>")` 로 그때 조회**한다. ⛔ 로그인 직후 사용자 정보를 미리 당겨와 전역에 심는 패턴 금지 — 중복 요청과 stale 세션의 원인이다.
-- FastAPI 실패는 `lib/server/fastapi.ts` 가 `FastapiError`(`kind` = `network`/`unauthorized`/`validation`/`server`/`http`)로 정규화한다. **로그인 실패의 401** 은 폼 오류 메시지로 돌려주고(⛔ 로그아웃·리다이렉트 금지, 에러 메시지가 사라진다), **그 밖의 401**(만료·무효)은 `getSessionUser()` 가 `/login?next=<현재경로>` 로 보낸다. 백엔드 미기동·5xx 는 세션 문제가 아니므로 리다이렉트하지 않고 `null` 을 돌려준다.
-- 오류 표시는 `error.kind` 로 구분한다(문구는 `fastapiErrorMessage()`). ⛔ 모든 실패를 자격증명 오류로 하드코딩 금지. 단 401 문구는 고정한다(계정 존재 여부 비노출).
+- FastAPI 실패는 `FastapiError`(`kind` = `network`/`unauthorized`/`validation`/`throttled`/`server`/`http`)로 정규화된다 — 분류·문구는 순수 모듈 `lib/fastapi-error.ts` 에 있고 `lib/server/fastapi.ts` 가 re-export 한다. **로그인 실패의 401** 은 폼 오류 메시지로 돌려주고(⛔ 로그아웃·리다이렉트 금지, 에러 메시지가 사라진다), **그 밖의 401**(만료·무효)은 `getSessionUser()` 가 `/login?next=<현재경로>` 로 보낸다. 백엔드 미기동·5xx 는 세션 문제가 아니므로 리다이렉트하지 않고 `null` 을 돌려준다.
+- 오류 표시는 `error.kind` 로 구분한다(문구는 `fastapiErrorMessage()`). ⛔ 모든 실패를 자격증명 오류로 하드코딩 금지. 단 401 문구는 고정한다(계정 존재 여부 비노출). 429(`throttled` — 로그인 시도 제한)는 자격증명 오류와 **구분해** 안내한다.
 
 ## 스타일 (§15)
 

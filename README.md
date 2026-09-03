@@ -46,7 +46,10 @@ mindmap
       Vitest
     기본 내장 기능
       JWT 로그인
+      DB 세션 refresh 토큰·자동 갱신
       httpOnly 쿠키 세션
+      로그인 시도 제한
+      보안 응답 헤더
       관리자 계정 자동 시드
       보호 라우트
       로그인 후 원래 위치 복귀
@@ -115,9 +118,9 @@ sequenceDiagram
     N->>A: POST /api/v1/auth/login
     A->>D: 사용자 조회
     D-->>A: user
-    A->>A: bcrypt 검증
-    A-->>N: access_token
-    N->>N: httpOnly 쿠키 설정
+    A->>A: bcrypt 검증 + refresh 세션 생성
+    A-->>N: access_token + refresh_token
+    N->>N: httpOnly 쿠키 2개 설정 (access·refresh)
     N-->>B: 검증된 원래 위치로 리다이렉트
     B->>N: 보호 페이지 요청
     N->>N: 서버 컴포넌트가 쿠키에서 토큰 조회
@@ -133,12 +136,15 @@ sequenceDiagram
     B-->>U: 사용자·시스템 상태 표시
     U->>B: 로그아웃 선택
     B->>N: 로그아웃 Server Action 실행
-    N->>N: httpOnly 쿠키 삭제
+    N->>A: POST /api/v1/auth/logout (refresh 세션 폐기)
+    N->>N: httpOnly 쿠키 2개 삭제
     N-->>B: 로그인 화면으로 리다이렉트
 ```
 
 > 브라우저는 Next 서버하고만 통신한다. FastAPI 호출과 Bearer JWT 주입은 서버 컴포넌트 또는
 > Server Action에서 수행하며, 세션 토큰은 브라우저 JavaScript가 읽을 수 없는 httpOnly 쿠키에 둔다.
+> access 쿠키(기본 15분)가 만료되면 `middleware.ts`가 refresh 쿠키(기본 14일, DB 세션 기반 회전)로
+> 새 토큰 쌍을 받아 재로그인 없이 세션을 잇는다.
 
 ### 요청이 흐르는 계층
 
@@ -368,6 +374,9 @@ chmod +x scaffold.sh          # 최초 1회 (실행 권한이 없을 때)
 - 브라우저 실제 렌더링(디자인 적용·콘솔 에러)은 확인하지 않았다. 검증은 전부 HTTP 레벨(curl)이다.
 - `pnpm dev`(개발 서버) 경로는 사용하지 않았다. 구동 검증은 `pnpm build && pnpm start` 로 했다.
 - 로그아웃 Server Action 은 별도로 호출해 보지 않았다.
+- 위 검증 **이후**의 인증 개편(refresh 토큰·middleware 자동 갱신·로그인 스로틀·보안 응답 헤더,
+  [CHANGELOG](CHANGELOG.md) 참조)에 대해서는 이 절차의 끝-대-끝 재검증을 반복하지 않았다.
+  당시 확인한 쿠키 이름 상수도 이후 `lib/session.ts` 에서 `lib/session-cookie.ts` 로 옮겨졌다.
 
 ## 라이선스와 기여
 

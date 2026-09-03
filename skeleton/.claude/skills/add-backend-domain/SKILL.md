@@ -38,7 +38,7 @@ description: __PROJECT_NAME__ 백엔드에 새 도메인/리소스(예: orders, 
 3. **스키마** `backend/app/schemas/<domain>.py` — Pydantic 2.x
    - `XxxBase` → `XxxCreate` / `XxxUpdate` / `XxxRead` 상속 패턴.
    - 제약은 `Field(ge=, max_length=)`, 복합 규칙은 `@field_validator`. ORM 모델과 분리.
-   - 비밀번호를 저장하는 입력은 문자 수가 아니라 `len(password.encode("utf-8")) <= 72`로 검증한다. 한글은 UTF-8에서 글자당 3 bytes이므로 단순 72자 제한과 다르다. 초과는 스키마/서비스 경계에서 422 도메인 오류로 변환하며, `hash_password()`의 방어적 `ValueError`를 500으로 노출하지 않는다(§9).
+   - 새로 저장하는 비밀번호는 `core/security` 의 `validate_new_password()`(최소 `PASSWORD_MIN_LENGTH` 8자 + `len(password.encode("utf-8")) <= 72` bytes)로 검증한다. 한글은 UTF-8에서 글자당 3 bytes이므로 단순 72자 제한과 다르다. 위반은 스키마/서비스 경계에서 422 도메인 오류로 변환하며, `hash_password()`의 방어적 `ValueError`를 500으로 노출하지 않는다(§9).
 
 4. **서비스** `backend/app/services/<domain>_service.py` — 함수형
    - `def create_order(db, user, data): ...` 형태. DB 트랜잭션·규칙 검증·외부 연동을 여기서.

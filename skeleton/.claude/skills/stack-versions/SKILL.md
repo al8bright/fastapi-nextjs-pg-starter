@@ -41,14 +41,14 @@ description: __PROJECT_NAME__ 의 고정 스택 버전과 버전별 주의사항
   - 서버 → 클라이언트로 넘기는 props 는 **직렬화 가능한 값**만 된다(함수·클래스 인스턴스 불가).
 - ⛔ **서버 전용 모듈이 클라이언트 번들로 새는 문제**가 이 스택의 1순위 사고다. FastAPI 호출·세션·비밀값을 다루는 모듈은 첫 줄에 **`import "server-only"`** 를 넣어라 — 클라이언트가 import 하는 순간 빌드가 실패해 즉시 잡힌다. 없으면 조용히 번들에 섞여 나간다.
 - ⛔ **`NEXT_PUBLIC_` 을 붙이면 그 값은 빌드 시 클라이언트 번들에 그대로 박힌다.** `FASTAPI_URL` 같은 서버 전용 값에 절대 붙이지 마라. 브라우저가 진짜로 읽어야 하는 공개 값에만 쓴다.
-- 배포는 **Node 런타임**이다(`next build` → `next start`). ⛔ 정적 호스팅으로는 서버 컴포넌트·Server Action·`middleware.ts` 가 동작하지 않는다. dev 포트는 **3000**. `next.config.ts` 는 `productionBrowserSourceMaps: false` 하나만 둔다 — ⛔ `output: "export"` 를 켜면 위 세 가지가 전부 죽는다.
+- 배포는 **Node 런타임**이다(`next build` → `next start`). ⛔ 정적 호스팅으로는 서버 컴포넌트·Server Action·`middleware.ts` 가 동작하지 않는다. dev 포트는 **3000**. `next.config.ts` 는 `productionBrowserSourceMaps: false` 와 보안 응답 헤더(`headers()` — CSP·HSTS 등, architecture.md §13)만 둔다 — ⛔ `output: "export"` 를 켜면 위 세 가지가 전부 죽는다.
 - 번들러는 Vite 가 아니다(Turbopack/webpack). ⛔ Vite 플러그인·`import.meta.env`·`vite.config.ts` 전제를 끌어오지 말 것. (`vitest.config.ts` 는 **테스트 전용**이며 빌드와 무관하다.)
 
 ### Server Actions / 쿠키
 - **`cookies()`(`next/headers`)는 async 다** — `const store = await cookies()` 로 받아서 읽고 쓴다.
 - **페이지의 `searchParams`·`params` 도 Promise 다** — `const params = await searchParams`. ⚠️ `await` 없이 프로퍼티를 읽으면 **에러 없이 조용히 `undefined`** 가 된다(`?next=` 가 항상 비어 복귀 경로가 `/` 로 떨어지는 식). 타입은 `Promise<Record<string, string | string[] | undefined>>` 이고, 같은 키가 여러 번 오면 **배열**이다.
 - 쿠키 **쓰기(set/delete)는 Server Action·Route Handler·미들웨어에서만** 가능하다. 서버 컴포넌트 렌더 중에는 읽기만 된다 — 렌더 중 쓰기를 시도하면 런타임 에러다.
-- 세션 쿠키 속성은 `httpOnly` · `sameSite: "lax"` · `path: "/"` · `maxAge` · **`secure` 는 `NODE_ENV === "production"` 일 때만**이다. ⚠️ localhost(http)에서 `secure` 를 켜면 쿠키가 저장되지 않아 **로그인이 무한 루프**가 된다. `maxAge` 는 백엔드 `ACCESS_TOKEN_EXPIRE_MINUTES` 와 **수동 동기화** — 백엔드 `TokenResponse` 에 `expires_in` 이 없다.
+- 세션 쿠키는 **두 개**(access + refresh)이고 속성은 `httpOnly` · `sameSite: "lax"` · `path: "/"` · **`secure` 는 `NODE_ENV === "production"` 일 때만**이다(production 은 이름에 `__Host-` 프리픽스). ⚠️ localhost(http)에서 `secure` 를 켜면 쿠키가 저장되지 않아 **로그인이 무한 루프**가 된다. `maxAge` 는 백엔드 `TokenResponse` 의 `expires_in`(access 는 −60초)·`refresh_expires_in` 으로 **자동 동기화**된다. 이름·속성·maxAge 계산의 SSOT 는 **의존성 0 인 `lib/session-cookie.ts`** 다 — 삭제도 `delete()` 가 아니라 같은 속성으로 `maxAge: 0` 을 덮어쓴다(`__Host-` 조건).
 - Server Action 시그니처는 **`(prevState, formData) => Promise<State>`**, 폼 훅은 **`const [state, formAction, isPending] = useActionState(action, INITIAL_STATE)`**(3튜플)다. 액션은 **직렬화 가능한 상태 객체를 반환**하게 하고, 예외를 던져 500 으로 흘리지 마라.
 - ⛔ **`"use server"` 파일은 async 함수만 export 할 수 있다.** 폼 초기 상태 같은 **상수를 export 하면 빌드가 깨진다** — 클라이언트 컴포넌트 쪽에 두고(스켈레톤은 `components/LoginForm.tsx` 의 `INITIAL_STATE`), 액션 파일에서는 **타입만** 내보낸다(타입 export 는 컴파일 시 지워진다).
 - 변경 후에는 **`revalidatePath()`(또는 `revalidateTag()`)** 로 서버 렌더 캐시를 무효화한다. 무효화하지 않으면 이전 데이터가 그대로 보인다. 화면 이동은 **`redirect()`**.
@@ -57,14 +57,14 @@ description: __PROJECT_NAME__ 의 고정 스택 버전과 버전별 주의사항
 - ⛔ Server Action 을 클라이언트에서 `fetch` 로 흉내내지 마라. 폼은 `<form action={...}>` 으로 연결한다. 폼이 없는 변경은 `useTransition()` + `startTransition(action)`.
 
 ### `middleware.ts`
-- 인증 가드는 루트 `middleware.ts` 한 곳이다. `export const config = { matcher: [...] }` 로 대상을 정하고, 세션 쿠키가 없으면 `/login?next=<pathname+search>` 로 보낸다(쿠키 **존재만** 확인 — 서명·만료 검증은 FastAPI 몫이다).
+- 인증 가드는 루트 `middleware.ts` 한 곳이다. `export const config = { matcher: [...] }` 로 대상을 정하고, access 쿠키가 있으면 통과(쿠키 **존재만** 확인 — 서명·만료 검증은 FastAPI 몫이다), access 가 없고 refresh 쿠키만 있으면 백엔드 `/auth/refresh` 로 **자동 갱신**(성공 시 두 쿠키 교체, 401 이면 파기, 네트워크·5xx 는 보존), 둘 다 없으면 `/login?next=<pathname+search>` 로 보낸다. ⛔ `lib/session.ts`·`lib/server/fastapi.ts` 를 import 하지 마라 — `server-only`·`next/headers` 가 Edge 번들로 끌려온다. 쿠키 상수는 의존성 0 인 `lib/session-cookie.ts` 에서 가져온다.
 - ⛔ **matcher 에서 `/login` 과 정적 자산을 제외하지 않으면 무한 리다이렉트**가 난다(로그인 페이지 자체가 다시 가드에 걸린다). 스켈레톤의 실제 값은 **제외 목록**이다:
   ```ts
   matcher: ["/((?!login(?:/|$)|_next/|.*\\.(?:ico|png|jpg|jpeg|gif|svg|webp|avif|css|js|map|txt|xml|json|webmanifest|woff2?)$).*)"]
   ```
   `login`(로그인 화면) · `_next/static`·`_next/image`(빌드 산출물·이미지 최적화) · `.*\.`(favicon.ico 처럼 **확장자가 있는** public 정적 파일)을 빼놓은 것이다. 공개 경로를 늘릴 땐 이 제외 목록에 더한다 — ⛔ 보호 경로를 나열하는 방식으로 바꾸면 새 라우트가 조용히 무방비가 된다.
 - ⚠️ **오픈 리다이렉트 방지**: `next` 파라미터를 그대로 `redirect()` 에 넣으면 외부 사이트로 유도할 수 있다. `lib/safe-redirect.ts` 로 **내부 경로만** 통과시킨다 — `/` 로 시작(이것만으로 `https:`·`javascript:` 스킴이 걸러진다)하고, 두 번째 문자가 `/`·`\` 가 아니며, 백슬래시·공백·제어문자가 없고, `/login` 자신이 아닌 것만. 그 외에는 `/` 로 떨어뜨리고(query·hash 는 보존), **이 검증 함수에는 테스트를 붙인다**(`lib/safe-redirect.test.ts`).
-- 미들웨어는 요청마다 돈다. 무거운 작업(DB·외부 API 호출)을 넣지 말고 쿠키 존재 확인 수준으로 유지한다.
+- 미들웨어는 요청마다 돈다. 무거운 작업(DB·외부 API 호출)을 넣지 말고 쿠키 존재 확인 수준으로 유지한다. 유일한 예외가 refresh 자동 갱신인데, access 쿠키 만료 주기(기본 15분)에 한 번꼴이고 **타임아웃 5초**로 짧게 끊는다 — 백엔드가 응답을 물고 있으면 사이트 전체가 이 fetch 에 매달리기 때문이다.
 
 ### Tailwind v4 + Next — `4.3`
 - ⛔ **`@tailwindcss/vite` 는 쓸 수 없다.** Next 는 Vite 가 아니다. → **`@tailwindcss/postcss`** 플러그인 + **`postcss.config.mjs`** 조합이다.
@@ -86,10 +86,10 @@ description: __PROJECT_NAME__ 의 고정 스택 버전과 버전별 주의사항
 - v2 API(`model_config`, `@field_validator`, `SettingsConfigDict`). ⛔ v1 패턴(`class Config`, `@validator`) 금지.
 
 ### 인증 / 린트·CI
-- 자체 계정 비밀번호는 **bcrypt** 해시(`core/security` 의 `hash_password`/`verify_password`). JWT `sub` = user id.
+- 자체 계정 비밀번호는 **bcrypt** 해시(`core/security` 의 `hash_password`/`verify_password`, 새 비밀번호는 `validate_new_password` — 최소 8자 + 72 bytes 상한). access JWT 클레임은 `sub`(user id)·`sid`(세션 id)·`iat`·`exp`·`typ:"access"` — `sid` 없는 토큰은 401 이다. refresh 토큰은 JWT 가 아니라 DB(`auth_sessions`)에 해시로 저장되는 **불투명 토큰**이다(회전·재사용 감지·로그인 스로틀은 architecture.md §9).
 - 프론트 린트는 **ESLint flat config**(`frontend/eslint.config.mjs`): `@eslint/js` recommended + **`eslint-config-next/core-web-vitals`** + **`eslint-config-next/typescript`**. ⚠️ `core-web-vitals` 만 넣으면 **타입스크립트 규칙이 하나도 켜지지 않아**(파서만 붙는다) `any`·미사용 변수를 못 잡는다 — `typescript` 진입점을 반드시 함께 넣는다. 이 계열의 eslint-config-next 는 flat config 배열을 그대로 export 하므로 `FlatCompat`(Next 15 시절 템플릿)로 감쌀 필요가 없다. ⚠️ **ESLint 본체 메이저는 `eslint-config-next` 가 요구하는 계열에 맞춘다** — 형제 저장소(React SPA 판)가 더 앞선 메이저를 써도 여기선 Next 쪽을 따른다. 실제 값은 `frontend/package.json`(§1).
 - 백엔드 린트는 **ruff**(`backend/pyproject.toml`): FastAPI `Depends` 등은 **B008 예외**(`extend-immutable-calls`), `alembic/` 제외, line-length 120. 새 의존성으로 lint 가 깨지면 이 설정을 먼저 본다.
-- **CI**(`.github/workflows/ci.yml`)가 push·PR(main) 마다 실행: `backend`(ruff → pytest(SQLite in-memory))는 **`ubuntu-latest`·`windows-latest` OS 매트릭스**로 돌려 OS 분기 버그를 잡고, `migrations`(**alembic upgrade head + alembic check**, postgres:16 서비스 컨테이너에 `DATABASE_URL` 주입)는 **ubuntu 전용 잡**으로 분리한다 — ⛔ 서비스 컨테이너는 Linux 러너에서만 뜨므로 매트릭스 잡에 `services:` 를 두면 Windows 잡이 시작조차 못 한다. `powershell-syntax` 잡은 Windows PowerShell 5.1 로 모든 `.ps1` 을 파싱하고 PS7 전용 토큰(`??`·`&&`·`||`·`?.`)을 거부한다. frontend 는 **`eslint` → `typecheck`(`tsc --noEmit`) → `test`(vitest) → `build`(`next build`)** 순으로 돈다. Python/Node 버전은 하드코딩 대신 **`python-version-file: .python-version` / `node-version-file: .nvmrc`** 로 읽으므로 버전 상향 시 핀 파일만 갱신하면 된다. 워크플로는 생성 프로젝트(루트)에서만 동작한다.
+- **CI**(`.github/workflows/ci.yml`)가 push·PR(main) 마다 실행: `backend`(ruff → pytest(SQLite in-memory))는 **`ubuntu-latest`·`windows-latest` OS 매트릭스**로 돌려 OS 분기 버그를 잡고, `migrations`(**alembic upgrade head + alembic check**, postgres:16 서비스 컨테이너에 `DATABASE_URL` 주입)는 **ubuntu 전용 잡**으로 분리한다 — ⛔ 서비스 컨테이너는 Linux 러너에서만 뜨므로 매트릭스 잡에 `services:` 를 두면 Windows 잡이 시작조차 못 한다. `powershell-syntax` 잡은 Windows PowerShell 5.1 로 모든 `.ps1` 을 파싱하고 PS7 전용 토큰(`??`·`&&`·`||`·`?.`)을 거부한다. frontend 는 **`eslint` → `typecheck`(`tsc --noEmit`) → `test`(vitest) → `build`(`next build`)** 순으로 돈다. `backend-audit`(pip-audit)·`frontend-audit`(`pnpm audit --prod`) 잡은 의존성 취약점을 스캔하는 **경고성**(`continue-on-error`) 잡이다 — 새 CVE 는 커밋 없이도 공개되므로 실패로 두지 않는 대신, 로그의 ⚠ 표시를 주기적으로 확인해 패치한다. Python/Node 버전은 하드코딩 대신 **`python-version-file: .python-version` / `node-version-file: .nvmrc`** 로 읽으므로 버전 상향 시 핀 파일만 갱신하면 된다. 워크플로는 생성 프로젝트(루트)에서만 동작한다.
 - frontend 는 **`pnpm-lock.yaml` 커밋 필수** — skeleton 에는 없고 scaffold 의 첫 `pnpm install` 이 생성하므로, **생성 프로젝트의 최초 커밋에 반드시 포함**시킨다. CI 환경(`CI=true`)의 pnpm 은 frozen-lockfile 이 기본이라 lockfile 이 없거나 `package.json` 과 어긋나면 설치가 실패한다. 의존성 변경 시 lockfile 도 함께 커밋한다.
 
 ## 4. 백엔드 핀 정책

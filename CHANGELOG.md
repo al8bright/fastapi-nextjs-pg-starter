@@ -5,6 +5,56 @@
 
 ---
 
+## 2026-09-03 — 인증 개편: refresh 세션·로그인 스로틀·보안 헤더
+
+access 토큰 단일 발급이던 인증을 **DB 세션 기반 refresh 토큰** 체계로 전면 개편하고,
+로그인 브루트포스 방어와 프론트 보안 응답 헤더를 추가했다.
+
+### Added (추가)
+
+- **DB 세션 기반 refresh 토큰** — `POST /auth/refresh`·`POST /auth/logout` 추가.
+  refresh 토큰은 JWT 가 아닌 불투명 토큰(`"<sid>.<urlsafe>"`)으로 DB(`auth_sessions`)에 SHA-256
+  해시만 저장하고, 회전(rotation) 방식에 **재사용 감지 시 세션 즉시 폐기**를 넣었다. 회전해도
+  절대 수명(로그인 시점 + `REFRESH_TOKEN_EXPIRE_DAYS`, 기본 14일)은 연장되지 않는다.
+  로그아웃은 refresh 토큰 소지를 폐기 권한으로 보는 멱등 204(인증 불요)다.
+  (`app/models/auth_session.py`, `app/services/session_service.py`, 마이그레이션 `0003_auth_sessions`)
+- **access 토큰의 즉시 무효화** — access JWT 에 `sid` 클레임을 넣고 `get_current_user` 가 요청마다
+  세션 유효성을 검사한다. 로그아웃·강제 폐기가 access 만료를 기다리지 않고 즉시 401 이 된다.
+- **로그인 시도 제한** — 계정(username)별 DB 카운터(`login_throttles`). `LOGIN_MAX_FAILURES`(5) 도달
+  시 `LOGIN_LOCKOUT_MINUTES`(15분) 잠금 → 429. 미존재 계정도 기록해 잠금 응답 유무로 계정 존재가
+  드러나지 않는다.
+- **비밀번호 정책 통합** — `validate_new_password()` 한 곳에서 최소 8자(`PASSWORD_MIN_LENGTH`) +
+  72 bytes 상한(bcrypt)을 검증한다. 하한은 새 비밀번호에만 적용된다(기존 계정 로그인은 통과).
+- **감사 로그** — 보안 이벤트(로그인 성공/실패/잠금, refresh 회전/거부/재사용 감지, 로그아웃)를
+  전용 로거 `app.audit` 로 분리 수집한다.
+- **middleware 자동 세션 갱신** — access 쿠키가 없고 refresh 쿠키만 있으면 백엔드 `/auth/refresh` 를
+  직접 호출(5초 타임아웃)해 회전된 새 쌍으로 쿠키를 교체하고 통과시킨다. 401 이면 쿠키 파기,
+  네트워크·5xx 는 쿠키 보존 후 리다이렉트만 한다(일시 장애로 전 사용자를 로그아웃시키지 않는다).
+- **보안 응답 헤더** — `next.config.ts` 에서 전 경로에 CSP·`X-Frame-Options: DENY`·nosniff·
+  Referrer-Policy·Permissions-Policy·production HSTS 를 내보낸다.
+- **CI 의존성 취약점 스캔** — `backend-audit`(pip-audit)·`frontend-audit`(`pnpm audit --prod`)
+  경고성(`continue-on-error`) 잡 추가.
+
+### Changed (변경)
+
+- **`ACCESS_TOKEN_EXPIRE_MINUTES` 기본 30 → 15분** — 갱신을 refresh 가 담당하므로 access 는 짧게.
+  두 스캐폴드 스크립트가 생성하는 `.env` 도 15분으로 동기화했다.
+- **세션 쿠키 2개 체계** — access(`<project>_session`, maxAge = `expires_in` − 60초) +
+  refresh(`<project>_refresh`, maxAge = `refresh_expires_in`). production 은 `__Host-` 프리픽스로
+  서브도메인 쿠키 주입을 브라우저 단에서 차단한다. maxAge 가 백엔드 응답 값으로 **자동 동기화**
+  되어 수동 동기화 규칙이 사라졌다. 삭제는 `delete()` 가 아니라 같은 속성으로 maxAge 0 덮어쓰기다.
+  이름·속성 헬퍼는 의존성 0 인 `lib/session-cookie.ts` 로 모았다.
+- **`TokenResponse` 확장** — `/auth/login`·`/auth/refresh` 가 동일하게
+  `{access_token, refresh_token, token_type, expires_in, refresh_expires_in}` 을 돌려준다
+  (`expires_in` 은 "지금부터 남은 초").
+- **로그아웃 Server Action** — 백엔드 `/auth/logout` 을 best-effort 로 호출해 refresh 세션을
+  폐기한 뒤 두 쿠키를 지운다.
+- **`FastapiError` 를 `lib/fastapi-error.ts` 로 분리** — `server-only` 없는 순수 모듈로 뽑아 vitest 로
+  고정하고(`lib/server/fastapi.ts` 가 re-export), 429 용 `"throttled"` kind 를 추가해 시도 제한을
+  자격증명 오류와 구분해 안내한다.
+- **scaffold.sh 시크릿 폴백 제거** — openssl·python3 둘 다 없으면 타임스탬프 기반 약한 키로
+  진행하는 대신 즉시 중단한다(생성 시각 추측만으로 서명키가 복원되는 위험 제거).
+
 ## 2026-08-20 (2) — 실행 검증 및 보안 수정
 
 템플릿을 실제로 스캐폴드해 PostgreSQL 18 + SSR 프로덕션 모드로 끝까지 돌려보고, 재현된 결함을 고쳤다.
