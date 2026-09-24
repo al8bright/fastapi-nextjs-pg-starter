@@ -17,6 +17,11 @@ const config = [
   js.configs.recommended,
   ...nextCoreWebVitals,
   ...nextTypescript,
+  // ⚠️ ESLint 10 은 v9 에서 deprecated 였던 context.getFilename() 등을 제거했다.
+  //    eslint-plugin-react(eslint-config-next 의존성)의 React 버전 자동 감지("detect")가
+  //    아직 그 API 를 쓰므로, 감지를 건너뛰도록 버전을 명시해 우회한다.
+  //    React 를 올릴 때 이 값도 함께 맞춘다(SSOT 는 package.json 의 react 핀).
+  { settings: { react: { version: "19.3" } } },
 ]
 
 export default config

@@ -12,8 +12,8 @@ from app.core.security import now
 from app.db.base import Base
 
 
-class UserRole(str, enum.Enum):
-    """사용자 권한 (str 상속 — DB 에는 값 문자열로 저장)."""
+class UserRole(enum.StrEnum):
+    """사용자 권한 (StrEnum — DB 에는 값 문자열로 저장. ruff UP042: py3.11+ 는 str+Enum 대신 StrEnum)."""
 
     USER = "user"
     ADMIN = "admin"
