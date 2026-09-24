@@ -1,7 +1,6 @@
 import "server-only"
 
-// FastAPI 호출 래퍼 (architecture.md §13).
-// React SPA 판의 src/lib/api.ts(axios + 401 인터셉터)에 대응한다. 아키텍처가 다르다:
+// FastAPI 호출 래퍼 (architecture.md §13). 호출 경로는 항상 이렇다:
 //
 //   브라우저 → Next(서버) → FastAPI
 //

@@ -46,7 +46,7 @@ export function kindFor(status: number): FastapiFailureKind {
 }
 
 /**
- * 실패 원인을 사용자 문구로 바꾼다 (React 판 loginErrorMessage 와 동일한 분기).
+ * 실패 원인을 사용자 문구로 바꾼다 — kind 별로 분기한다.
  * 모든 실패를 "아이디 또는 비밀번호"로 표시하면 422·네트워크 오류·500 을 오진한다.
  */
 export function fastapiErrorMessage(error: unknown): string {

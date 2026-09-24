@@ -5,11 +5,11 @@ import { getSessionUser } from "@/lib/session"
 import type { DbHealth, Health } from "@/lib/types"
 
 // 랜딩(시스템 상태) 화면.
-// React 판은 React Query 훅 두 개로 클라이언트에서 폴링했지만, 여기서는 **서버가 직접** 호출한다.
+// 상태 조회는 클라이언트 훅 폴링이 아니라 **서버가 직접** 호출한다.
 // 브라우저는 FastAPI 주소를 알지도 못한다 (architecture.md §13).
 //
 // 로딩 표시는 <Suspense> 로 만든다 — 서버가 두 요청을 기다리는 동안 껍데기부터 스트리밍되고,
-// 응답이 도착하면 배지만 교체된다. React 판의 isPending 과 같은 UX 를 서버 렌더로 재현한 것이다.
+// 응답이 도착하면 배지만 교체된다. 클라이언트 로딩 상태 없이 서버 렌더만으로 같은 UX 를 낸다.
 
 type Tone = "loading" | "ok" | "error"
 

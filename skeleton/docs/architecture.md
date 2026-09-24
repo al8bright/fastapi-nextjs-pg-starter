@@ -89,7 +89,7 @@
 - **패키지 매니저**: **pnpm** (npm 금지)
 - **타입체크**: `tsc --noEmit` (`pnpm typecheck`)
 - **린트**: ESLint flat config — `eslint-config-next`(core-web-vitals + typescript) + `@eslint/js` (`eslint.config.mjs`, `pnpm lint`)
-- **테스트**: Vitest `4.1` + `@vitejs/plugin-react` + jsdom + Testing Library (`vitest.config.ts`, `pnpm test` / `pnpm test:watch`)
+- **테스트**: Vitest `5.0` + `@vitejs/plugin-react` + jsdom + Testing Library (`vitest.config.ts`, `pnpm test` / `pnpm test:watch`)
 - **배포 런타임**: **Node 런타임**이 필요하다 — `next build` → `next start`. ⛔ 정적 호스팅(순수 파일 서빙)으로는 서버 컴포넌트·Server Action·`middleware.ts` 가 동작하지 않는다
 
 > 프론트 표준은 **서버 컴포넌트 fetch + Server Actions** 로 통일한다.
@@ -777,7 +777,7 @@ export default function LandingPage() {
 
 ### 프론트엔드 테스트 (vitest)
 
-러너는 **Vitest `4.1`**, 실행은 `pnpm test`(watch 는 `pnpm test:watch`). 설정은 `vitest.config.ts` 에 둔다 — `@vitejs/plugin-react` + `environment: "jsdom"` + `setupFiles: "./vitest.setup.ts"`(jest-dom 매처), 대상은 `{app,components,lib}/**/*.test.{ts,tsx}`. **경로 별칭 `@/*` 는 Vitest 가 tsconfig 에서 읽어오지 않으므로 `resolve.alias` 에 다시 적는다.**
+러너는 **Vitest `5.0`**, 실행은 `pnpm test`(watch 는 `pnpm test:watch`). 설정은 `vitest.config.ts` 에 둔다 — `@vitejs/plugin-react` + `environment: "jsdom"` + `setupFiles: "./vitest.setup.ts"`(jest-dom 매처), 대상은 `{app,components,lib}/**/*.test.{ts,tsx}`. **경로 별칭 `@/*` 는 Vitest 가 tsconfig 에서 읽어오지 않으므로 `resolve.alias` 에 다시 적는다.**
 
 `tsc --noEmit` 과 `eslint` 는 **런타임 동작을 잡지 못한다.** 스켈레톤이 실제로 고정하는 회귀는 네 개다:
 
@@ -808,7 +808,7 @@ export default function LandingPage() {
 - **로그인은 Server Action**: 폼 제출 → `POST /api/v1/auth/login`(JSON `{username, password}`) → 응답의 access·refresh 를 **httpOnly 쿠키 2개로 설정**(`setSessionTokens`) → `redirect(safeRedirect(next))` 로 원래 위치(없으면 `/`) 복귀. 429(시도 제한)는 자격증명 오류와 구분된 문구로 보여준다.
 - **사용자 정보는 이동한 화면의 서버 컴포넌트가 `getSessionUser("<현재경로>")`(→ `GET /api/v1/auth/me`)로 직접 읽는다.** 서버 컴포넌트는 자기 URL 을 모르므로 복귀 경로를 인자로 넘긴다. 로그인 액션에서 미리 불러 클라이언트로 넘기지 않는다 — 중복 요청이 되고, 실패 시 리다이렉트까지 건너뛰어진다.
 - **로그아웃도 Server Action**: 백엔드 `POST /auth/logout` 으로 refresh 토큰을 **폐기(revoke)** 한 뒤 두 쿠키를 지우고 `/login` 으로 리다이렉트한다. 백엔드 호출은 **best-effort** 다 — 로그아웃의 본체는 쿠키 삭제이고, `/auth/logout` 은 멱등(204·인증 불요)이라 실패·재시도 모두 안전하다. 폐기된 세션의 access 토큰은 sid 검사로 **즉시 401** 이 된다(§9).
-- **401 처리**: middleware 는 만료를 모르므로 **통과했는데 FastAPI 가 401 을 주는 구간이 반드시 생긴다**(자동 refresh 가 대부분 걸러 주지만 `SECRET_KEY` 교체·계정 비활성화·세션 폐기는 남는다). 그때 `getSessionUser()` 가 `FastapiError.kind === "unauthorized"` 를 보고 `/login?next=<현재경로>` 로 보낸다(React 판 401 인터셉터 자리). 그 밖의 실패(백엔드 미기동·5xx)는 세션 문제가 아니므로 리다이렉트하지 않고 `null` 을 돌려준다 — 화면이 "로그인 만료"와 "백엔드 다운"을 구분해 보여줄 수 있어야 한다.
+- **401 처리**: middleware 는 만료를 모르므로 **통과했는데 FastAPI 가 401 을 주는 구간이 반드시 생긴다**(자동 refresh 가 대부분 걸러 주지만 `SECRET_KEY` 교체·계정 비활성화·세션 폐기는 남는다). 그때 `getSessionUser()` 가 `FastapiError.kind === "unauthorized"` 를 보고 `/login?next=<현재경로>` 로 보낸다 — 만료 세션 처리는 이 함수 한 곳이 담당한다. 그 밖의 실패(백엔드 미기동·5xx)는 세션 문제가 아니므로 리다이렉트하지 않고 `null` 을 돌려준다 — 화면이 "로그인 만료"와 "백엔드 다운"을 구분해 보여줄 수 있어야 한다.
 - **SSO 도입 시 확장**: 로그인 페이지에서 백엔드 authorize URL 로 보내고, 콜백을 받을 라우트(`app/auth/callback/`)에서 토큰을 **쿠키로 옮긴 뒤** 리다이렉트한다. 토큰을 클라이언트 코드가 만지지 않는 원칙은 그대로다(§9).
 
 ### 세션 쿠키 속성 (MUST)

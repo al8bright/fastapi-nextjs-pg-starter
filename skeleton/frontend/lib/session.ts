@@ -11,7 +11,7 @@ import {
 import type { TokenResponse, User } from "@/lib/types"
 
 // 세션 = httpOnly 쿠키 단일 출처 (architecture.md §14).
-// React SPA 판의 src/lib/auth.ts(localStorage) 에 대응한다. 차이가 핵심이다:
+// localStorage 에 토큰을 두는 SPA 방식과 달리,
 // 이 토큰들은 **브라우저 JS 가 읽을 수 없다**. 따라서 XSS 로 토큰을 탈취당하지 않고,
 // 대신 FastAPI 호출은 전부 서버(서버 컴포넌트 / Server Action)에서만 일어난다.
 //
@@ -89,12 +89,13 @@ export async function hasValidSession(): Promise<boolean> {
 }
 
 /**
- * 현재 세션 사용자 (`GET /api/v1/auth/me`). React 판의 useMe() 에 대응한다.
+ * 현재 세션 사용자 (`GET /api/v1/auth/me`).
  *
  * ⚠️ middleware 는 **쿠키의 존재**만 본다 — 토큰이 만료됐는지는 알 수 없다.
  *    그래서 middleware 를 통과하고도 FastAPI 가 401 을 주는 구간이 반드시 생긴다
  *    (자동 refresh 가 대부분 걸러 주지만, SECRET_KEY 교체·계정 비활성화는 남는다).
- *    그 경우 여기서 `/login?next=<현재경로>` 로 보낸다 (React 판의 401 인터셉터 역할).
+ *    만료 세션을 로그인으로 보내는 일은 인터셉터가 아니라 이 함수가 담당한다 —
+ *    그 경우 여기서 `/login?next=<현재경로>` 로 보낸다.
  *
  * 백엔드 미기동·5xx 는 세션 문제가 아니므로 리다이렉트하지 않고 `null` 을 돌려준다 —
  * 화면이 "로그인 만료"와 "백엔드 다운"을 구분해 보여줄 수 있어야 한다.

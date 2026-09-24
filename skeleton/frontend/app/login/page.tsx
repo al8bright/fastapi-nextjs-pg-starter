@@ -20,7 +20,7 @@ export default async function LoginPage({
   // 배열로 올 수 있다 (?next=/a&next=/b). 첫 값만 쓰고, 반드시 내부 경로인지 검증한다.
   const next = safeRedirect(Array.isArray(raw) ? raw[0] : raw)
 
-  // 이미 **유효한** 세션이 있으면 목적지로 (React 판의 `if (isAuthenticated) return <Navigate to={from} />`).
+  // 이미 **유효한** 세션이 있으면 로그인 폼 대신 목적지로 보낸다.
   // ⛔ 쿠키 존재만 보면 안 된다 — 쿠키는 살아 있고 토큰만 무효인 상태에서
   //    getSessionUser 가 여기로 보내고 여기가 다시 되돌려 보내 무한 리다이렉트가 된다.
   //    redirect() 는 예외로 동작하므로 반드시 try/catch 바깥에서 호출한다(hasValidSession 안이 아니라).

@@ -3,10 +3,9 @@
 import { useActionState } from "react"
 import { loginAction, type LoginState } from "@/lib/actions/auth"
 
-// 로그인 폼 (architecture.md §14). React SPA 판 LoginPage 의 <form> 부분과 마크업이 동일하다.
-// 달라진 것은 제출 경로뿐이다:
-//   React : useState 로 값 보관 → axios.post → localStorage 저장 → navigate
-//   Next  : 브라우저가 FormData 를 Server Action 으로 보냄 → 서버가 FastAPI 호출 → httpOnly 쿠키 → redirect
+// 로그인 폼 (architecture.md §14). 제출 경로가 일반적인 SPA 방식과 다르다:
+//   SPA 방식 : useState 로 값 보관 → 브라우저가 API POST → localStorage 저장 → navigate
+//   여기     : 브라우저가 FormData 를 Server Action 으로 보냄 → 서버가 FastAPI 호출 → httpOnly 쿠키 → redirect
 //
 // 그래서 입력값을 useState 로 붙들 이유가 없다(비제어 입력 + name 속성).
 // JS 가 아직 로드되지 않았어도 폼이 그대로 제출된다.
@@ -14,7 +13,7 @@ import { loginAction, type LoginState } from "@/lib/actions/auth"
 const INITIAL_STATE: LoginState = { error: null }
 
 export default function LoginForm({ next }: { next: string }) {
-  // useActionState 는 [상태, action, 대기중] 을 준다 — React 판의 mutation.isError/isPending 대응.
+  // useActionState 는 [상태, action, 대기중] 을 준다 — 오류 표시와 제출 중 잠금에 쓴다.
   const [state, formAction, isPending] = useActionState(loginAction, INITIAL_STATE)
 
   return (

@@ -7,8 +7,8 @@ import {
 } from "@/lib/session-cookie"
 import type { TokenResponse } from "@/lib/types"
 
-// 인증 가드 + 자동 세션 갱신 (architecture.md §14). React SPA 판의 ProtectedRoute 에 대응한다.
-// 차이: 렌더 트리가 아니라 **요청 단계**에서 막는다 — 보호 페이지의 HTML 이 브라우저로
+// 인증 가드 + 자동 세션 갱신 (architecture.md §14). 보호 라우트를 렌더 트리의 가드 컴포넌트가
+// 아니라 **요청 단계**에서 막는다 — 보호 페이지의 HTML 이 브라우저로
 // 나가기 전에 리다이렉트되므로, 미인증 사용자에게 보호 화면이 한 프레임도 깜빡이지 않는다.
 //
 // ⚠️ access 쿠키는 **존재만** 확인한다. 서명 검증은 하지 않는다.
