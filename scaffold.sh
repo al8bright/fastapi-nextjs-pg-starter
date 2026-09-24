@@ -373,12 +373,16 @@ fi
 case "$DB_NAME" in
   *"'"*|*'"'*) echo "DB 이름에 따옴표(' \")는 사용할 수 없습니다: $DB_NAME" >&2; exit 1 ;;
 esac
-# 비밀번호는 URL 인코딩해 DATABASE_URL 에 넣는다 (@ : / # ? % 등 특수문자 안전)
+# 비밀번호는 URL 인코딩해 DATABASE_URL 에 넣는다 (@ : / # ? % 등 특수문자 안전).
+# ⛔ 인코딩 실패 시 원문 폴백을 두지 않는다 — 특수문자 비밀번호가 인코딩 없이 URL 에 들어가면
+#    "생성은 성공했는데 DB 접속만 조용히 실패"하는 프로젝트가 나온다. 런타임 사전 검사(위)가
+#    python3 를 보장하므로 이 실패는 비정상 상황이고, 즉시 중단이 맞다.
 _urlenc() {
-  python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1" 2>/dev/null \
-    || printf '%s' "$1"
+  python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
 }
-DATABASE_URL="postgresql+psycopg2://${DB_USER}:$(_urlenc "$DB_PASSWORD")@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+DB_PASSWORD_ENC="$(_urlenc "$DB_PASSWORD")" \
+  || { echo "DB 비밀번호 URL 인코딩에 실패했습니다 (python3 확인) — 중단합니다." >&2; exit 1; }
+DATABASE_URL="postgresql+psycopg2://${DB_USER}:${DB_PASSWORD_ENC}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
 # SECRET_KEY 는 JWT 서명키이므로 반드시 암호학적 난수여야 한다.
 # ⛔ 타임스탬프 폴백(change-me-<epoch>)은 생성 시각만 추측하면 서명키가 복원되어 토큰 위조로
 #    직결된다 — 난수를 만들 수 없으면 약한 키로 진행하지 말고 즉시 중단한다.
@@ -493,6 +497,11 @@ cat > "$TARGET/backend/.env" <<EOF || { warn "backend/.env 생성 실패 — 중
 DATABASE_URL=$DATABASE_URL
 SECRET_KEY=$SECRET
 ACCESS_TOKEN_EXPIRE_MINUTES=15
+# 인증 세션·로그인 스로틀 (architecture.md §9) — 코드 기본값과 같지만, 운영자가 .env 만 보고도
+# 조절 지점을 알 수 있도록 명시한다.
+REFRESH_TOKEN_EXPIRE_DAYS=14
+LOGIN_MAX_FAILURES=5
+LOGIN_LOCKOUT_MINUTES=15
 CORS_ORIGINS=http://localhost:3000
 FRONTEND_URL=http://localhost:3000
 BACKEND_PUBLIC_URL=http://localhost:8000

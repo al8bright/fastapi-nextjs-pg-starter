@@ -516,6 +516,11 @@ $backendEnv = @"
 DATABASE_URL=$databaseUrl
 SECRET_KEY=$secret
 ACCESS_TOKEN_EXPIRE_MINUTES=15
+# 인증 세션·로그인 스로틀 (architecture.md §9) — 코드 기본값과 같지만, 운영자가 .env 만 보고도
+# 조절 지점을 알 수 있도록 명시한다.
+REFRESH_TOKEN_EXPIRE_DAYS=14
+LOGIN_MAX_FAILURES=5
+LOGIN_LOCKOUT_MINUTES=15
 CORS_ORIGINS=http://localhost:3000
 FRONTEND_URL=http://localhost:3000
 BACKEND_PUBLIC_URL=http://localhost:8000
