@@ -78,7 +78,7 @@ description: __PROJECT_NAME__ 의 고정 스택 버전과 버전별 주의사항
 - 실측 `tsconfig.json`: `moduleResolution: "bundler"` · `plugins: [{ "name": "next" }]` · **`baseUrl` 없이 `paths` 만으로** `@/*` → 프로젝트 루트(⛔ deprecated 된 `baseUrl` 을 되살리지 말 것) · `types` 는 **설정하지 않는다**(설정하는 순간 목록에 없는 `@types/*` 가 전부 빠져 `node:path` 를 쓰는 `vitest.config.ts` 부터 깨진다).
 - ⚠️ `next-env.d.ts` 는 **커밋하지 않는다**(빌드가 매번 생성). 이 파일이 없어도 `skipLibCheck` 덕에 `tsc --noEmit` 은 통과하므로, 생성 타입까지 보려면 **typecheck 뒤에 `next build` 까지** 돌려야 한다(CI 가 그렇게 한다).
 - 테스트 러너는 **Vitest** + **`@vitejs/plugin-react`** + **jsdom** + Testing Library(`vitest.config.ts` · `vitest.setup.ts` · `pnpm test`). 테스트는 대상 파일 옆에 `*.test.ts(x)`. ⚠️ Vitest 는 tsconfig 의 `paths` 를 읽지 않으므로 `resolve.alias` 에 `@` 를 **다시 적어야** 한다.
-- ⚠️ **서버 컴포넌트·Server Action·`middleware.ts` 는 Vitest 로 테스트하지 않는다.** jsdom 에는 RSC 런타임도 요청 컨텍스트(`cookies()`/`redirect()`)도 없고, `server-only` 를 import 하는 모듈(`lib/server/*`·`lib/session.ts`·`lib/actions/*`)은 러너에서 **로드조차 되지 않는다**. 모킹으로 통과시키면 "초록인데 실제로는 깨지는" 가짜 안전망이 된다. 실제로 덮은 범위는 **`lib/safe-redirect.test.ts`(순수 함수)와 `components/LoginForm.test.tsx`(클라이언트 폼 — Action 모듈은 `vi.mock`)** 둘뿐이고, 나머지는 `pnpm build` + 수동 동작 확인으로 대신한다.
+- ⚠️ **서버 컴포넌트·Server Action·`middleware.ts` 는 Vitest 로 테스트하지 않는다.** jsdom 에는 RSC 런타임도 요청 컨텍스트(`cookies()`/`redirect()`)도 없고, `server-only` 를 import 하는 모듈(`lib/server/*`·`lib/session.ts`·`lib/actions/*`)은 러너에서 **로드조차 되지 않는다**. 모킹으로 통과시키면 "초록인데 실제로는 깨지는" 가짜 안전망이 된다. 실제로 덮은 범위는 **`lib/` 의 순수 함수(`safe-redirect`·`session-cookie`·`fastapi-error` 의 `*.test.ts`)와 `components/LoginForm.test.tsx`(클라이언트 폼 — Action 모듈은 `vi.mock`)** 뿐이고, 나머지는 `pnpm build` + 수동 동작 확인으로 대신한다.
 
 ### FastAPI 0.141 + Starlette 1.x
 - TestClient 는 **httpx2** 를 쓴다(httpx 아님). `requirements.txt` 에 `httpx2`. ⛔ `httpx` 로 되돌리면 deprecation 경고.

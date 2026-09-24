@@ -12,7 +12,14 @@ description: __PROJECT_NAME__ 에서 변경을 커밋·push 할 때 사용. main
 PR 리뷰 단계가 없으므로 **검증을 건너뛰면 깨진 코드가 곧바로 `main`에 남는다.**
 CI는 push 이후에 도는 **사후 안전망**이지 사전 게이트가 아니다.
 
+```bash
+# macOS / Linux
+cd backend && ./.venv/bin/python -m pytest -q && ./.venv/bin/python -m ruff check .
+cd ../frontend && pnpm lint && pnpm typecheck && pnpm test && pnpm build
+```
+
 ```powershell
+# Windows
 cd backend;  .\.venv\Scripts\python -m pytest -q;  .\.venv\Scripts\python -m ruff check .
 cd ..\frontend;  pnpm lint;  pnpm typecheck;  pnpm test;  pnpm build
 ```

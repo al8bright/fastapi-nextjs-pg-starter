@@ -17,7 +17,7 @@ description: __PROJECT_NAME__ 백엔드에 새 도메인/리소스(예: orders, 
 1. **모델** `backend/app/models/<domain>.py` — SQLAlchemy 2.0 `Mapped`/`mapped_column`
    ```python
    from datetime import datetime
-   from sqlalchemy import DateTime, Integer, String
+   from sqlalchemy import DateTime, String
    from sqlalchemy.orm import Mapped, mapped_column
    from app.core.security import now      # KST naive
    from app.db.base import Base

@@ -1,6 +1,6 @@
 ---
 name: add-frontend-feature
-description: __PROJECT_NAME__ 프론트엔드(Next.js App Router)에 기능·페이지·데이터 조회/변경을 추가할 때 사용. 서버 컴포넌트 직접 fetch + Server Action + httpOnly 쿠키 세션 표준(lib/types.ts → lib/server/<domain>.ts → app/<route>/page.tsx → lib/actions/<domain>.ts)과 middleware 보호 라우트를 architecture.md §13·§14 기준으로 안내한다. ⛔ axios·React Query·Zustand·localStorage 는 쓰지 않는다.
+description: __PROJECT_NAME__ 프론트엔드(Next.js App Router)에 기능·페이지·데이터 조회/변경을 추가할 때 사용. 서버 컴포넌트 직접 fetch + Server Action + httpOnly 쿠키 세션 표준(lib/types.ts → lib/server/<domain>.ts → app/<route>/page.tsx → lib/actions/<domain>.ts)과 middleware 보호 라우트를 architecture.md §13·§14 기준으로 안내한다.
 ---
 
 # 프론트엔드 기능 추가
@@ -53,8 +53,8 @@ description: __PROJECT_NAME__ 프론트엔드(Next.js App Router)에 기능·페
    - ⚠️ 래퍼는 쿠키를 읽지 않는다 — `lib/session.ts` 가 래퍼를 import 하므로 반대 방향은 **순환 의존**이 된다. 보호 API 는 위처럼 `getSessionToken()` 결과를 넘긴다(공개 API 는 `token` 생략).
 
 3. **화면** `frontend/app/<route>/page.tsx` — **서버 컴포넌트**
-   - 데이터는 `page.tsx` 에서 **직접 `await`** 한다. 이게 이 판의 기본 데이터 로딩 방식이다.
-   - ⛔ **`useEffect` + fetch 로 서버 데이터를 가져오지 마라.** ⛔ 브라우저에서 FastAPI 직접 호출 금지.
+   - 데이터는 `page.tsx` 에서 **직접 `await`** 한다. 이것이 이 프로젝트의 기본 데이터 로딩 방식이다.
+   - ⛔ **`useEffect` + fetch 로 서버 데이터를 가져오지 마라** — 브라우저에서 FastAPI 를 부르게 되어 위 경계 규칙을 깬다.
    - 로그인 사용자가 필요하면 `getSessionUser("<이 페이지 경로>")` 를 부른다 — 서버 컴포넌트는 자기 URL 을 모르므로 복귀 경로를 직접 넘긴다. 401 이면 함수가 `/login?next=…` 로 보내고, 백엔드 장애면 `null` 을 준다(⛔ 두 경우를 같은 문구로 뭉뚱그리지 말 것).
    - ⚠️ **`searchParams`·`params` 는 Promise 다.** `await` 없이 프로퍼티를 읽으면 예외도 없이 **조용히 `undefined`** 가 된다.
    ```tsx
