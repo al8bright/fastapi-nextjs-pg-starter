@@ -25,7 +25,7 @@
 ## 작업 방식
 
 - 대화와 문서는 한국어를 기본으로 하고, 명령 예시는 현재 OS에 맞게 작성한다. 프론트엔드 명령에는 pnpm을 사용한다.
-- 새 작업은 `plan.md`에 기록하고 실패하는 테스트 하나부터 시작한다(Red → Green → Refactor).
+- 새 작업은 `PLAN.md`에 기록하고 실패하는 테스트 하나부터 시작한다(Red → Green → Refactor).
 - 테스트가 통과하는 상태에서만 리팩터링한다.
 - Structural 변경과 Behavioral 변경을 한 커밋이나 PR에 섞지 않는다.
 - 커밋 제목은 `[Structural]` 또는 `[Behavioral]` 접두사를 붙이고 변경 의도를 간결하게 적는다.

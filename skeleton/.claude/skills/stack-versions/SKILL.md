@@ -29,6 +29,7 @@ description: __PROJECT_NAME__ 의 고정 스택 버전과 버전별 주의사항
 ## 3. ⚠️ 버전별 함정 (코드·설정 작성 시 반드시)
 
 ### pnpm 10+ (현재 11)
+- ⚠️ **pnpm 12 가 배포돼 있지만 이 템플릿은 11 계열을 유지한다** — 이 절의 함정들이 11 기준이고, 메이저 상향은 워크스페이스 설정 의미가 바뀔 수 있어 §5 검증을 거친 별도 결정으로만 한다.
 - 의존성 **빌드 스크립트가 기본 차단**된다. 허용은 `frontend/pnpm-workspace.yaml` 의 **`allowBuilds` 맵**(`패키지: true`)으로 한다. 현재 허용 목록은 그 파일에서 확인한다.
 - ⛔ pnpm 10 의 **`onlyBuiltDependencies` 리스트는 pnpm 11 에서 무시된다.** 이 서술은 pnpm 10 기준 문서와 정반대이므로 주의할 것. 리스트로 두면 `ERR_PNPM_IGNORED_BUILDS` 가 그대로 발생할 뿐 아니라, **pnpm 이 `pnpm-workspace.yaml` 에 `allowBuilds` 항목을 자동으로 써 넣어 템플릿 파일을 오염시킨다.**
 - ⚠️ **`minimum-release-age` 기본값이 24시간**이다. 배포된 지 24시간이 안 된 버전을 `^` 로 핀하면 설치가 막히고 pnpm 이 `minimumReleaseAgeExclude:` 를 자동 삽입한다(역시 템플릿 오염). → **배포 후 24시간이 지난 버전만 핀한다.** 갓 나온 버전을 급히 올리지 말 것.
@@ -71,14 +72,15 @@ description: __PROJECT_NAME__ 의 고정 스택 버전과 버전별 주의사항
 - CSS-first 설정: `frontend/app/globals.css` 의 `@import "tailwindcss"` + `@theme { ... }`. ⛔ `tailwind.config.js` 를 새로 만들지 말 것.
 - 전역 스타일은 `app/layout.tsx` 에서 `globals.css` 를 import 하는 경로 하나로만 들어온다.
 
-### TypeScript / 테스트 — `6.0` · `4.1`
+### TypeScript / 테스트 — `6.0` · `5.0`
+- ⛔ **TypeScript 7 로 올리지 마라** — typescript-eslint 8.x 가 TS 7.0 을 하드 거부한다(peer `<6.1`, TS 7.1+ 지원은 typescript-eslint#10940 에서 추적 중). `eslint-config-next` 가 typescript-eslint 를 직접 의존하므로 우회할 수 없고, `pnpm lint` 가 즉시 죽는다. 지원이 풀리면 §5 절차로 재검증 후 상향한다.
 - 타입체크는 **`tsc --noEmit`**(`pnpm typecheck`)로 별도 실행한다. `next build` 도 타입을 보지만, 빠른 피드백은 `typecheck` 쪽이다. 린트(`eslint .`)와 역할이 다르니 **둘 다** 돌린다.
 - 실측 `tsconfig.json`: `moduleResolution: "bundler"` · `plugins: [{ "name": "next" }]` · **`baseUrl` 없이 `paths` 만으로** `@/*` → 프로젝트 루트(⛔ deprecated 된 `baseUrl` 을 되살리지 말 것) · `types` 는 **설정하지 않는다**(설정하는 순간 목록에 없는 `@types/*` 가 전부 빠져 `node:path` 를 쓰는 `vitest.config.ts` 부터 깨진다).
 - ⚠️ `next-env.d.ts` 는 **커밋하지 않는다**(빌드가 매번 생성). 이 파일이 없어도 `skipLibCheck` 덕에 `tsc --noEmit` 은 통과하므로, 생성 타입까지 보려면 **typecheck 뒤에 `next build` 까지** 돌려야 한다(CI 가 그렇게 한다).
 - 테스트 러너는 **Vitest** + **`@vitejs/plugin-react`** + **jsdom** + Testing Library(`vitest.config.ts` · `vitest.setup.ts` · `pnpm test`). 테스트는 대상 파일 옆에 `*.test.ts(x)`. ⚠️ Vitest 는 tsconfig 의 `paths` 를 읽지 않으므로 `resolve.alias` 에 `@` 를 **다시 적어야** 한다.
 - ⚠️ **서버 컴포넌트·Server Action·`middleware.ts` 는 Vitest 로 테스트하지 않는다.** jsdom 에는 RSC 런타임도 요청 컨텍스트(`cookies()`/`redirect()`)도 없고, `server-only` 를 import 하는 모듈(`lib/server/*`·`lib/session.ts`·`lib/actions/*`)은 러너에서 **로드조차 되지 않는다**. 모킹으로 통과시키면 "초록인데 실제로는 깨지는" 가짜 안전망이 된다. 실제로 덮은 범위는 **`lib/safe-redirect.test.ts`(순수 함수)와 `components/LoginForm.test.tsx`(클라이언트 폼 — Action 모듈은 `vi.mock`)** 둘뿐이고, 나머지는 `pnpm build` + 수동 동작 확인으로 대신한다.
 
-### FastAPI 0.137 + Starlette 1.x
+### FastAPI 0.141 + Starlette 1.x
 - TestClient 는 **httpx2** 를 쓴다(httpx 아님). `requirements.txt` 에 `httpx2`. ⛔ `httpx` 로 되돌리면 deprecation 경고.
 - 서버↔서버 HTTP 클라이언트도 `httpx2`.
 
@@ -87,7 +89,7 @@ description: __PROJECT_NAME__ 의 고정 스택 버전과 버전별 주의사항
 
 ### 인증 / 린트·CI
 - 자체 계정 비밀번호는 **bcrypt** 해시(`core/security` 의 `hash_password`/`verify_password`, 새 비밀번호는 `validate_new_password` — 최소 8자 + 72 bytes 상한). access JWT 클레임은 `sub`(user id)·`sid`(세션 id)·`iat`·`exp`·`typ:"access"` — `sid` 없는 토큰은 401 이다. refresh 토큰은 JWT 가 아니라 DB(`auth_sessions`)에 해시로 저장되는 **불투명 토큰**이다(회전·재사용 감지·로그인 스로틀은 architecture.md §9).
-- 프론트 린트는 **ESLint flat config**(`frontend/eslint.config.mjs`): `@eslint/js` recommended + **`eslint-config-next/core-web-vitals`** + **`eslint-config-next/typescript`**. ⚠️ `core-web-vitals` 만 넣으면 **타입스크립트 규칙이 하나도 켜지지 않아**(파서만 붙는다) `any`·미사용 변수를 못 잡는다 — `typescript` 진입점을 반드시 함께 넣는다. 이 계열의 eslint-config-next 는 flat config 배열을 그대로 export 하므로 `FlatCompat`(Next 15 시절 템플릿)로 감쌀 필요가 없다. ⚠️ **ESLint 본체 메이저는 `eslint-config-next` 가 요구하는 계열에 맞춘다** — 형제 저장소(React SPA 판)가 더 앞선 메이저를 써도 여기선 Next 쪽을 따른다. 실제 값은 `frontend/package.json`(§1).
+- 프론트 린트는 **ESLint flat config**(`frontend/eslint.config.mjs`): `@eslint/js` recommended + **`eslint-config-next/core-web-vitals`** + **`eslint-config-next/typescript`**. ⚠️ `core-web-vitals` 만 넣으면 **타입스크립트 규칙이 하나도 켜지지 않아**(파서만 붙는다) `any`·미사용 변수를 못 잡는다 — `typescript` 진입점을 반드시 함께 넣는다. 이 계열의 eslint-config-next 는 flat config 배열을 그대로 export 하므로 `FlatCompat`(Next 15 시절 템플릿)로 감쌀 필요가 없다. ⚠️ **ESLint 10 + eslint-plugin-react 조합의 함정**: eslint-plugin-react 의 React 버전 자동 감지(`"detect"`)가 v10 에서 제거된 `context.getFilename()` 을 아직 호출해 린트가 크래시한다 — `eslint.config.mjs` 의 `settings: { react: { version: "..." } }` 명시가 그 우회이므로 **지우면 안 된다**(React 상향 시 이 값도 함께 갱신). 향후 다른 제거 API 로 lint 가 또 크래시하면 eslint `^9` 복귀가 대안이다. ⚠️ **ESLint 본체 메이저는 `eslint-config-next` 가 요구하는 계열에 맞춘다** — 형제 저장소(React SPA 판)가 더 앞선 메이저를 써도 여기선 Next 쪽을 따른다. 실제 값은 `frontend/package.json`(§1).
 - 백엔드 린트는 **ruff**(`backend/pyproject.toml`): FastAPI `Depends` 등은 **B008 예외**(`extend-immutable-calls`), `alembic/` 제외, line-length 120. 새 의존성으로 lint 가 깨지면 이 설정을 먼저 본다.
 - **CI**(`.github/workflows/ci.yml`)가 push·PR(main) 마다 실행: `backend`(ruff → pytest(SQLite in-memory))는 **`ubuntu-latest`·`windows-latest` OS 매트릭스**로 돌려 OS 분기 버그를 잡고, `migrations`(**alembic upgrade head + alembic check**, postgres:16 서비스 컨테이너에 `DATABASE_URL` 주입)는 **ubuntu 전용 잡**으로 분리한다 — ⛔ 서비스 컨테이너는 Linux 러너에서만 뜨므로 매트릭스 잡에 `services:` 를 두면 Windows 잡이 시작조차 못 한다. `powershell-syntax` 잡은 Windows PowerShell 5.1 로 모든 `.ps1` 을 파싱하고 PS7 전용 토큰(`??`·`&&`·`||`·`?.`)을 거부한다. frontend 는 **`eslint` → `typecheck`(`tsc --noEmit`) → `test`(vitest) → `build`(`next build`)** 순으로 돈다. `backend-audit`(pip-audit)·`frontend-audit`(`pnpm audit --prod`) 잡은 의존성 취약점을 스캔하는 **경고성**(`continue-on-error`) 잡이다 — 새 CVE 는 커밋 없이도 공개되므로 실패로 두지 않는 대신, 로그의 ⚠ 표시를 주기적으로 확인해 패치한다. Python/Node 버전은 하드코딩 대신 **`python-version-file: .python-version` / `node-version-file: .nvmrc`** 로 읽으므로 버전 상향 시 핀 파일만 갱신하면 된다. 워크플로는 생성 프로젝트(루트)에서만 동작한다.
 - frontend 는 **`pnpm-lock.yaml` 커밋 필수** — skeleton 에는 없고 scaffold 의 첫 `pnpm install` 이 생성하므로, **생성 프로젝트의 최초 커밋에 반드시 포함**시킨다. CI 환경(`CI=true`)의 pnpm 은 frozen-lockfile 이 기본이라 lockfile 이 없거나 `package.json` 과 어긋나면 설치가 실패한다. 의존성 변경 시 lockfile 도 함께 커밋한다.

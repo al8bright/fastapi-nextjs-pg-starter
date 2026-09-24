@@ -13,7 +13,7 @@ fastapi-nextjs-pg-starter/
 ├── README.md               # (이 파일)
 └── skeleton/               # 새 프로젝트가 받는 골격 전체
     ├── CLAUDE.md           # 프로젝트 AI 개발 지침 (선택)
-    ├── plan.md             # TDD 작업 계획
+    ├── PLAN.md             # TDD 작업 계획
     ├── README.md
     ├── .python-version / .nvmrc      # 런타임 핀
     ├── .gitignore / .gitattributes
@@ -249,7 +249,7 @@ chmod +x scaffold.sh          # 최초 1회 (실행 권한이 없을 때)
 1. 스크립트가 출력한 대로 백엔드(`uvicorn`)·프론트(`pnpm dev`)를 실행
 2. 브라우저 <http://localhost:3000> → 랜딩 페이지에서 **백엔드·DB 연결 상태**가 "정상"이면 성공
 3. 생성 프로젝트의 [`README.md`](skeleton/README.md)·[`docs/architecture.md`](skeleton/docs/architecture.md)·
-   [`plan.md`](skeleton/plan.md) 를 읽고 TDD(Red→Green→Refactor)로 개발 시작
+   [`PLAN.md`](skeleton/PLAN.md) 를 읽고 TDD(Red→Green→Refactor)로 개발 시작
 
 개발용 기본 관리자는 `admin` 이며, 비밀번호는 스캐폴드가 프로젝트마다 무작위로 생성해 `backend/.env` 의 `DEFAULT_ADMIN_PASSWORD` 에 넣고 완료 안내에 출력한다. 시드는 코드 기본값이 꺼져 있고(`SEED_DEFAULT_ADMIN=false`) 이 `.env` 에서만 켜진다.
 **운영 배포 전에는** `SECRET_KEY` 교체, 기본 관리자 시드 비활성화 또는 비밀번호 변경,
@@ -287,9 +287,9 @@ chmod +x scaffold.sh          # 최초 1회 (실행 권한이 없을 때)
 | 영역 | 고정 방식 | 값 | SSOT |
 |---|---|---|---|
 | 런타임 하한 | 이상이면 기존 설치본 재사용 | Python `≥ 3.13`, Node.js `≥ 24`, pnpm `≥ 11` | [`versions.env`](skeleton/scripts/versions.env) |
-| 런타임 설치 핀 | pyenv·fnm·corepack 이 설치·활성화 | Python `3.13.14`, Node.js `24`(24.x 최신), pnpm `11.9.0` | [`.python-version`](skeleton/.python-version), [`.nvmrc`](skeleton/.nvmrc), `package.json` 의 `packageManager` |
-| 백엔드 패키지 | `==` **정확 고정** (재현성 우선) | fastapi `0.137.2`, sqlalchemy `2.0.51` 등 13개 | [`requirements.txt`](skeleton/backend/requirements.txt) |
-| 프론트엔드 패키지 | 런타임 4종은 `==` 정확 고정, TypeScript 는 `~`, 그 외 도구는 `^` | next `16.3.1`, react·react-dom `19.2.8`, eslint-config-next `16.3.1`, typescript `~6.0.3`, tailwindcss `^4.3.3`, vitest `^4.1.11` 등 | [`package.json`](skeleton/frontend/package.json), [`pnpm-lock.yaml`](skeleton/frontend/pnpm-lock.yaml) |
+| 런타임 설치 핀 | pyenv·fnm·corepack 이 설치·활성화 | Python `3.13.14`, Node.js `24`(24.x 최신), pnpm `11.27.1` | [`.python-version`](skeleton/.python-version), [`.nvmrc`](skeleton/.nvmrc), `package.json` 의 `packageManager` |
+| 백엔드 패키지 | `==` **정확 고정** (재현성 우선) | fastapi `0.141.1`, sqlalchemy `2.0.54` 등 13개 | [`requirements.txt`](skeleton/backend/requirements.txt) |
+| 프론트엔드 패키지 | 런타임 4종은 `==` 정확 고정, TypeScript 는 `~`, 그 외 도구는 `^` | next `16.3.6`, react·react-dom `19.3.0`, eslint-config-next `16.3.6`, typescript `~6.0.3`, tailwindcss `^4.3.3`, vitest `^5.0.1` 등 | [`package.json`](skeleton/frontend/package.json), [`pnpm-lock.yaml`](skeleton/frontend/pnpm-lock.yaml) |
 | PostgreSQL | 고정 없음 | `psycopg2-binary` 지원 범위(14+ 권장), CI 는 `postgres:16` | — |
 
 패키지별 전체 목록은 [생성 프로젝트 README의 기술 스택과 버전](skeleton/README.md#기술-스택과-버전)에 있다.
@@ -302,7 +302,7 @@ chmod +x scaffold.sh          # 최초 1회 (실행 권한이 없을 때)
 - 생성물의 코드·설정·문서 원본은 [`skeleton/`](skeleton/) 에서 수정한다.
 - 공통 디자인 토큰은 [`DESIGN.md`](DESIGN.md), 기본 설계 규칙은
   [`skeleton/docs/architecture.md`](skeleton/docs/architecture.md), 작업 계획은
-  [`skeleton/plan.md`](skeleton/plan.md) 에서 관리한다.
+  [`skeleton/PLAN.md`](skeleton/PLAN.md) 에서 관리한다.
 - [`skeleton/CLAUDE.md`](skeleton/CLAUDE.md) 와 `add-backend-domain`·`db-migration`·
   `add-frontend-feature`·`pr-workflow`·`stack-versions` [스킬](skeleton/.claude/skills/)은
   저장소 안의 규칙을 AI 개발 도구에서 활용하도록 돕는다. 다만 스캐폴드 생성, 애플리케이션 실행,

@@ -1,4 +1,4 @@
-# __PROJECT_NAME__ 작업 계획 (plan.md)
+# __PROJECT_NAME__ 작업 계획 (PLAN.md)
 
 > TDD 순서대로 진행한다. **한 번에 실패하는 테스트 하나**(Red) → 최소 구현(Green) → 정리(Refactor).
 > 구조 변경(Structural)과 동작 변경(Behavioral)을 분리한다.

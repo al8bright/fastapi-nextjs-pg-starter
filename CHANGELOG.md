@@ -5,6 +5,38 @@
 
 ---
 
+## 2026-09-24 — 스택 최신화(FastAPI 0.141·Next 16.3.6)와 스캐폴드 복사·치환 결함 수정
+
+### Changed (변경)
+
+- **백엔드 의존성 일괄 상향** — fastapi 0.141.1, uvicorn 0.53.0, sqlalchemy 2.0.54, alembic 1.20.0,
+  psycopg2-binary 2.9.13, pydantic 2.13.5, pydantic-settings 2.15.0, PyJWT 2.15.0, **bcrypt 5.0.0(메이저)**,
+  httpx2 2.13.1, ruff 0.16.8. bcrypt 5 에서도 타이밍 방어용 더미 해시가 실 bcrypt 라운드를 소모하는 것을
+  실측·테스트로 확인했다. ruff 0.16 의 UP042 에 따라 `UserRole` 을 `enum.StrEnum` 으로 전환했다.
+- **프론트엔드 의존성 일괄 상향** — next·eslint-config-next 16.3.6, react·react-dom 19.3.0,
+  **eslint 10(메이저)**, **vitest 5(메이저)**, vite 8.3, @vitejs/plugin-react 6.1.1, jsdom 30.1.1,
+  testing-library 계열, packageManager pnpm 11.27.1(11 계열 유지 — 12 상향은 별도 결정).
+  ESLint 10 이 제거한 API 를 eslint-plugin-react 가 아직 호출하는 문제는 `settings.react.version`
+  명시로 우회했다(stack-versions §3).
+- **TypeScript 는 6.0.3 유지** — typescript-eslint 8.x 가 TS 7.0 을 하드 거부한다
+  (peer `<6.1`, TS 7.1+ 지원은 typescript-eslint#10940). eslint-config-next 의 직접 의존이라 우회
+  불가하므로, 지원이 풀린 뒤 stack-versions §5 절차로 상향한다.
+- 검증: 임시 스캐폴드 생성 → 백엔드 ruff·pytest 60개 → 프론트 lint·typecheck·vitest 29개·build
+  끝-대-끝 통과. Alembic 은 로컬 PostgreSQL 왕복(upgrade→check→downgrade)까지 확인.
+
+### Fixed (수정)
+
+- **스캐폴드가 "토큰 치환" 에서 사실상 멈추던 결함** — 원인 두 가지를 모두 제거했다.
+  (1) 템플릿 저장소의 `skeleton/` 안에 남은 gitignore 산출물(node_modules·.venv·.next, 수백 MB)을
+  `cp -R`/`Copy-Item` 이 통째로 복사했고, 치환 대상 제외 목록에 `.next` 가 없어 수 MB 빌드 산출물에
+  문자열 치환이 걸렸다 → 복사를 `tar --exclude`(sh)/`robocopy /XD /XF`(ps1) 로 바꿔 산출물과 실제
+  `.env`(SECRET_KEY 유출 방지)를 원천 제외하고, 치환 제외 목록도 보강했다.
+  (2) macOS 기본 bash 3.2 의 `${var//…}` 가 UTF-8 한국어 대용량 문서에서 제곱 시간으로 동작해
+  75KB 문서 하나에 49초가 걸렸다 → 치환을 python3 단일 패스 바이트 치환으로 교체했다(전체 실행
+  50초+ → 1초 미만).
+
+---
+
 ## 2026-09-03 — 인증 개편: refresh 세션·로그인 스로틀·보안 헤더
 
 access 토큰 단일 발급이던 인증을 **DB 세션 기반 refresh 토큰** 체계로 전면 개편하고,

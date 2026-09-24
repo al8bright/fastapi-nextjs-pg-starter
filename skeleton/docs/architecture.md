@@ -16,7 +16,7 @@
 
 | # | 고정 규칙 (MUST) | § |
 |---|------------------|---|
-| 1 | **표준 스택 고정**: 백엔드 FastAPI 0.137 + SQLAlchemy 2.0 + Alembic, 프론트 **Next.js App Router + React Server Components + TS**, DB는 **PostgreSQL** | §2 |
+| 1 | **표준 스택 고정**: 백엔드 FastAPI 0.141 + SQLAlchemy 2.0 + Alembic, 프론트 **Next.js App Router + React Server Components + TS**, DB는 **PostgreSQL** | §2 |
 | 2 | **DB는 항상 Alembic으로만 관리** — 모든 스키마 생성·변경은 마이그레이션. ⛔ dev/운영 런타임 `create_all`·자동 DDL·수동 `ALTER` 금지(테스트 in-memory만 예외) | §11 |
 | 3 | **설정은 OS 무관한 서비스별 `.env`로 주입** — 백엔드는 `backend/.env`, 프론트는 `frontend/.env` 사용. ⛔ 개발 중 `$env:`/`export`/`set` 셸 환경변수 의존 금지. ⛔ 실제 `.env` 커밋 금지(각 `.env.example`만) | §5, §17 |
 | 4 | **시각은 KST 단일 기준** — `now()`는 naive `datetime.now()`, PostgreSQL `connect_args`에 `timezone=Asia/Seoul`. Unix는 `TZ=Asia/Seoul`, Windows는 OS 시각대를 서울(UTC+9)로 설정. ⛔ UTC 변환/`ZoneInfo` 신규 도입 금지 | §10, §7 |
@@ -66,7 +66,7 @@
 
 ### 백엔드
 - **언어/런타임**: Python 3.13+ (`X | None` 문법, `Mapped[]` 타입 힌트 사용) — 하한은 `scripts/versions.env`(`MIN_PYTHON`), 정확 핀은 루트 `.python-version`(pyenv)
-- **프레임워크**: FastAPI 0.137.x + Uvicorn(`[standard]`) — 정확 핀은 `backend/requirements.txt`(현재 0.137.2)
+- **프레임워크**: FastAPI 0.141.x + Uvicorn(`[standard]`) — 정확 핀은 `backend/requirements.txt`(현재 0.141.1)
 - **ORM/마이그레이션**: SQLAlchemy 2.0 (`Mapped`/`mapped_column`) + Alembic
 - **DB 드라이버**: PostgreSQL + `psycopg2-binary`
 - **설정**: `pydantic-settings` (BaseSettings)
@@ -77,7 +77,7 @@
 - **버전 고정**: `requirements.txt`에 **`==` 정확한 버전 핀** (재현성 우선)
 
 ### 프론트엔드
-- **프레임워크/런타임**: Next.js `16.3` (**App Router**) + React `19.2` + TypeScript `6.0`
+- **프레임워크/런타임**: Next.js `16.3` (**App Router**) + React `19.3` + TypeScript `6.0`
 - **라우팅**: App Router 파일 시스템 라우팅 (`app/**/page.tsx`, 공통 셸은 `app/layout.tsx`)
 - **데이터 페칭**: **서버 컴포넌트에서 직접 `fetch`** — 서버 전용 래퍼 `lib/server/fastapi.ts` 를 통해 FastAPI 호출
 - **변경(mutation)**: **Server Actions** (`'use server'`, `lib/actions/*.ts`)
@@ -125,11 +125,11 @@
 ├── docs/
 │   ├── architecture.md          # 본 가이드에서 벗어난 결정/사유 기록
 │   └── <연동>-가이드.md          # 선택 (SSO/ERP 등 외부 연동)
-├── plan.md                      # TDD 작업 순서 (필수)
+├── PLAN.md                      # TDD 작업 순서 (필수)
 └── README.md
 ```
 
-- 루트에 `plan.md`를 두고 **TDD 작업 순서**(실패 테스트 단위)를 관리한다.
+- 루트에 `PLAN.md`를 두고 **TDD 작업 순서**(실패 테스트 단위)를 관리한다.
 - 환경값은 `backend/.env.example`과 `frontend/.env.example`로 키만 공유하고, 복사해 만든 실제 `.env`는 커밋하지 않는다.
 
 ---
@@ -1023,7 +1023,7 @@ import "./globals.css"
 
 ## 18. 개발 원칙 (TDD · Tidy First)
 
-- **TDD 사이클**: Red → Green → Refactor. `plan.md` 순서대로 **한 번에 실패하는 테스트 하나**.
+- **TDD 사이클**: Red → Green → Refactor. `PLAN.md` 순서대로 **한 번에 실패하는 테스트 하나**.
   결함도 API 레벨 실패 테스트부터 작성한다.
 - **최소 구현**으로 Green을 만들고, **Refactor는 Green 상태에서만**.
 - **Tidy First**: **구조 변경(Structural)과 동작 변경(Behavioral)을 분리**한다. 한 커밋에 섞지 않는다.
@@ -1118,7 +1118,7 @@ gh pr merge --squash --delete-branch
 
 ## 21. 신규 프로젝트 부트스트랩 체크리스트
 
-- [ ] 저장소 구조(§3) 생성, `plan.md` / `backend/.env.example` / `frontend/.env.example` / `docs/architecture.md` / `.gitignore`(실제 `.env` 제외) 작성
+- [ ] 저장소 구조(§3) 생성, `PLAN.md` / `backend/.env.example` / `frontend/.env.example` / `docs/architecture.md` / `.gitignore`(실제 `.env` 제외) 작성
 - [ ] 백엔드 `app/` 골격(§4): `main.py`, `config.py`, `dependencies.py`, `db/`, `core/security.py`
 - [ ] `Settings` + `get_settings()` (§5) — **설정은 서비스별 `.env`로 주입, OS 독립 (MUST §5)**, CORS, Unix `TZ=Asia/Seoul`+`tzset()` / Windows OS 시각대 `서울`(UTC+9) 및 불일치 경고 확인
 - [ ] PostgreSQL `connect_args` KST 고정 (§7, §10)

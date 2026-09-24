@@ -280,7 +280,7 @@ pnpm build
 |---|---|---|---|
 | Python | ≥ 3.13 | `3.13.14` 정확 고정 | [`.python-version`](.python-version) — pyenv가 이 버전을 설치 |
 | Node.js | ≥ 24 | `24` major 고정 | [`.nvmrc`](.nvmrc) — fnm이 24.x 최신을 설치 |
-| pnpm | ≥ 11 | `11.9.0` 정확 고정 | [`frontend/package.json`](frontend/package.json)의 `packageManager` — corepack이 활성화 |
+| pnpm | ≥ 11 | `11.27.1` 정확 고정 | [`frontend/package.json`](frontend/package.json)의 `packageManager` — corepack이 활성화 |
 | PostgreSQL | 고정 없음 | — | `psycopg2-binary` 지원 범위(14+ 권장). CI는 `postgres:16` 사용 |
 
 하한은 [`scripts/versions.env`](scripts/versions.env)가 SSOT다(`MIN_PYTHON`·`MIN_NODE`·`MIN_PNPM`).
@@ -291,14 +291,14 @@ pnpm build
 
 | 패키지 | 고정 버전 | 패키지 | 고정 버전 |
 |---|---|---|---|
-| fastapi | `== 0.137.2` | bcrypt | `== 4.3.0` |
-| uvicorn[standard] | `== 0.49.0` | python-multipart | `== 0.0.32` |
-| sqlalchemy | `== 2.0.51` | httpx2 | `== 2.5.0` |
-| alembic | `== 1.18.5` | pytest | `== 9.1.1` |
-| psycopg2-binary | `== 2.9.12` | ruff | `== 0.14.0` |
-| pydantic | `== 2.13.4` | | |
-| pydantic-settings | `== 2.14.2` | | |
-| PyJWT | `== 2.13.0` | | |
+| fastapi | `== 0.141.1` | bcrypt | `== 5.0.0` |
+| uvicorn[standard] | `== 0.53.0` | python-multipart | `== 0.0.32` |
+| sqlalchemy | `== 2.0.54` | httpx2 | `== 2.13.1` |
+| alembic | `== 1.20.0` | pytest | `== 9.1.1` |
+| psycopg2-binary | `== 2.9.13` | ruff | `== 0.16.8` |
+| pydantic | `== 2.13.5` | | |
+| pydantic-settings | `== 2.15.0` | | |
+| PyJWT | `== 2.15.0` | | |
 
 ### 프론트엔드
 
@@ -307,15 +307,15 @@ pnpm build
 | 런타임 의존성 | 범위 | 개발 의존성 | 범위 |
 |---|---|---|---|
 | Next.js | `16.3` | TypeScript | `6.0` |
-| React | `19.2` | Tailwind CSS | `4.3` |
+| React | `19.3` | Tailwind CSS | `4.3` |
 | | | @tailwindcss/postcss | `4.3` |
-| | | ESLint | `9.39` |
-| | | Vitest | `4.1` |
+| | | ESLint | `10.11` |
+| | | Vitest | `5.0` |
 | | | @testing-library/react | `16.3` |
 
 ## 상세 문서
 
 - [`docs/architecture.md`](docs/architecture.md): 이 프로젝트의 아키텍처, MUST 규칙과 배포 전 체크리스트
-- [`plan.md`](plan.md): TDD 작업 순서와 기능별 체크리스트
+- [`PLAN.md`](PLAN.md): TDD 작업 순서와 기능별 체크리스트
 - [`CLAUDE.md`](CLAUDE.md): 저장소 안에서 자립적으로 동작하는 AI 개발 지침
 - [`.claude/skills/`](.claude/skills/): 백엔드 도메인, 마이그레이션, 프론트 기능, PR과 버전 작업을 위한 선택적 작업별 가이드

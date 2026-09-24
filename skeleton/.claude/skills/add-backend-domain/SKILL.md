@@ -9,7 +9,7 @@ description: __PROJECT_NAME__ 백엔드에 새 도메인/리소스(예: orders, 
 상세 근거: `docs/architecture.md` §4(구조)·§8(모델/스키마/서비스). DB 변경은 [db-migration] 스킬 참조.
 
 ## TDD 우선
-먼저 `plan.md`에 작업 순서를 적고, **실패하는 API 레벨 테스트 하나**부터 작성한다(Red → Green → Refactor).
+먼저 `PLAN.md`에 작업 순서를 적고, **실패하는 API 레벨 테스트 하나**부터 작성한다(Red → Green → Refactor).
 구조 변경(파일 이동/생성)과 동작 변경(로직)을 한 커밋에 섞지 않는다.
 
 ## 순서 (계층 분리 MUST)
