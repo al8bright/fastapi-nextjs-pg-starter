@@ -7,7 +7,7 @@ import { hasValidSession } from "@/lib/session"
 // 서버 컴포넌트(껍데기) + LoginForm(클라이언트) 조합이다. 폼만 클라이언트인 이유는
 // useActionState 로 오류 문구·대기 상태를 다뤄야 하기 때문이다.
 //
-// ⚠️ middleware 의 matcher 가 /login 을 제외하고 있어야 이 화면에 도달할 수 있다.
+// ⚠️ proxy 의 matcher 가 /login 을 제외하고 있어야 이 화면에 도달할 수 있다.
 
 // searchParams 는 Next 15+ 에서 **Promise** 다 — await 없이 프로퍼티를 읽으면 undefined 가 나온다.
 export default async function LoginPage({

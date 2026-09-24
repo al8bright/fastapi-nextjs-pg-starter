@@ -74,7 +74,7 @@ async function DbStatus() {
 }
 
 export default async function LandingPage() {
-  // ⛔ middleware 는 쿠키의 **존재**만 본다 — 그것만으로는 보호 경계가 아니다.
+  // ⛔ proxy 는 쿠키의 **존재**만 본다 — 그것만으로는 보호 경계가 아니다.
   //    (임의의 문자열 쿠키를 심으면 통과한다.) 보호 페이지는 반드시 여기서 실검증한다.
   //    백엔드가 죽어 있으면 getSessionUser 가 null 을 돌려주고 리다이렉트하지 않으므로,
   //    "연결 안 됨" 을 보여주는 이 화면의 진단 가치는 그대로 유지된다.

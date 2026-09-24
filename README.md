@@ -41,7 +41,7 @@ mindmap
       Next.js App Router
       React Server Components
       Server Actions
-      middleware 인증 가드
+      proxy 인증 가드
       Tailwind CSS v4
       Vitest
     기본 내장 기능
@@ -111,7 +111,7 @@ sequenceDiagram
 
     U->>B: 보호 경로 접속
     B->>N: 보호 경로 요청
-    N->>N: middleware 가 쿠키 확인
+    N->>N: proxy 가 쿠키 확인
     N-->>B: 쿠키 없음 → /login?next=원래경로 리다이렉트
     U->>B: 아이디·비밀번호 입력 후 제출
     B->>N: 로그인 Server Action 실행
@@ -143,7 +143,7 @@ sequenceDiagram
 
 > 브라우저는 Next 서버하고만 통신한다. FastAPI 호출과 Bearer JWT 주입은 서버 컴포넌트 또는
 > Server Action에서 수행하며, 세션 토큰은 브라우저 JavaScript가 읽을 수 없는 httpOnly 쿠키에 둔다.
-> access 쿠키(기본 15분)가 만료되면 `middleware.ts`가 refresh 쿠키(기본 14일, DB 세션 기반 회전)로
+> access 쿠키(기본 15분)가 만료되면 `proxy.ts`가 refresh 쿠키(기본 14일, DB 세션 기반 회전)로
 > 새 토큰 쌍을 받아 재로그인 없이 세션을 잇는다.
 
 ### 요청이 흐르는 계층
@@ -154,7 +154,7 @@ flowchart LR
       PG["app/ 서버 컴포넌트"] --> SF["lib/server/fastapi.ts 서버 fetch"]
       CC["components/ 클라이언트 컴포넌트"] --> AC["lib/actions/ Server Actions"]
       AC --> SF
-      MW["middleware.ts"] --> SS["lib/session.ts httpOnly 쿠키"]
+      MW["proxy.ts"] --> SS["lib/session.ts httpOnly 쿠키"]
     end
     subgraph BE["백엔드 app/"]
       RR["api/v1/ 얇은 라우터"] --> SV["services/ 도메인 로직"]
@@ -356,8 +356,8 @@ chmod +x scaffold.sh          # 최초 1회 (실행 권한이 없을 때)
 
 **참고 (동작에는 문제 없음)**
 
-- `next build` 가 `middleware` 파일 규약이 deprecated 이며 `proxy` 로 옮기라는 경고를 낸다
-  (Next.js 16.3.1). 빌드·동작은 정상이며 라우트 표에도 `ƒ Proxy (Middleware)` 로 표시된다.
+- 위 검증 당시(Next.js 16.3.1)에는 인증 가드가 `middleware.ts` 였고 `next build` 가 deprecated
+  경고를 냈다. 이후 `proxy.ts` 로 전환했다([CHANGELOG](CHANGELOG.md) 참조).
 - `next start` 는 `NODE_ENV=production` 이라 세션 쿠키에 `Secure` 가 붙는다. 브라우저는
   `http://localhost` 를 신뢰 출처로 취급해 문제가 없지만, curl 같은 클라이언트로 http 로
   테스트할 때는 쿠키가 저장되지 않으므로 쿠키를 직접 실어 보내야 한다.

@@ -1,6 +1,6 @@
 ---
 name: stack-versions
-description: __PROJECT_NAME__ 의 고정 스택 버전과 버전별 주의사항(gotcha)을 정의한다. 의존성 추가·업그레이드, pnpm/Next/tsconfig/PostCSS/테스트 설정 작업, 또는 버전에 따라 동작이 달라지는 코드를 작성·디버깅할 때 사용. 정확한 버전의 출처 파일과 pnpm 11(allowBuilds·minimum-release-age)/Next App Router 서버·클라이언트 경계/Server Actions·cookies()/middleware 무한 리다이렉트/Tailwind v4 PostCSS/TypeScript·Vitest 등 버전별 함정, 업그레이드 검증 절차를 안내한다.
+description: __PROJECT_NAME__ 의 고정 스택 버전과 버전별 주의사항(gotcha)을 정의한다. 의존성 추가·업그레이드, pnpm/Next/tsconfig/PostCSS/테스트 설정 작업, 또는 버전에 따라 동작이 달라지는 코드를 작성·디버깅할 때 사용. 정확한 버전의 출처 파일과 pnpm 11(allowBuilds·minimum-release-age)/Next App Router 서버·클라이언트 경계/Server Actions·cookies()/proxy(구 middleware) 무한 리다이렉트/Tailwind v4 PostCSS/TypeScript·Vitest 등 버전별 함정, 업그레이드 검증 절차를 안내한다.
 ---
 
 # 스택 버전 & 버전별 주의
@@ -42,13 +42,13 @@ description: __PROJECT_NAME__ 의 고정 스택 버전과 버전별 주의사항
   - 서버 → 클라이언트로 넘기는 props 는 **직렬화 가능한 값**만 된다(함수·클래스 인스턴스 불가).
 - ⛔ **서버 전용 모듈이 클라이언트 번들로 새는 문제**가 이 스택의 1순위 사고다. FastAPI 호출·세션·비밀값을 다루는 모듈은 첫 줄에 **`import "server-only"`** 를 넣어라 — 클라이언트가 import 하는 순간 빌드가 실패해 즉시 잡힌다. 없으면 조용히 번들에 섞여 나간다.
 - ⛔ **`NEXT_PUBLIC_` 을 붙이면 그 값은 빌드 시 클라이언트 번들에 그대로 박힌다.** `FASTAPI_URL` 같은 서버 전용 값에 절대 붙이지 마라. 브라우저가 진짜로 읽어야 하는 공개 값에만 쓴다.
-- 배포는 **Node 런타임**이다(`next build` → `next start`). ⛔ 정적 호스팅으로는 서버 컴포넌트·Server Action·`middleware.ts` 가 동작하지 않는다. dev 포트는 **3000**. `next.config.ts` 는 `productionBrowserSourceMaps: false` 와 보안 응답 헤더(`headers()` — CSP·HSTS 등, architecture.md §13)만 둔다 — ⛔ `output: "export"` 를 켜면 위 세 가지가 전부 죽는다.
+- 배포는 **Node 런타임**이다(`next build` → `next start`). ⛔ 정적 호스팅으로는 서버 컴포넌트·Server Action·`proxy.ts` 가 동작하지 않는다. dev 포트는 **3000**. `next.config.ts` 는 `productionBrowserSourceMaps: false` 와 보안 응답 헤더(`headers()` — CSP·HSTS 등, architecture.md §13)만 둔다 — ⛔ `output: "export"` 를 켜면 위 세 가지가 전부 죽는다.
 - 번들러는 Vite 가 아니다(Turbopack/webpack). ⛔ Vite 플러그인·`import.meta.env`·`vite.config.ts` 전제를 끌어오지 말 것. (`vitest.config.ts` 는 **테스트 전용**이며 빌드와 무관하다.)
 
 ### Server Actions / 쿠키
 - **`cookies()`(`next/headers`)는 async 다** — `const store = await cookies()` 로 받아서 읽고 쓴다.
 - **페이지의 `searchParams`·`params` 도 Promise 다** — `const params = await searchParams`. ⚠️ `await` 없이 프로퍼티를 읽으면 **에러 없이 조용히 `undefined`** 가 된다(`?next=` 가 항상 비어 복귀 경로가 `/` 로 떨어지는 식). 타입은 `Promise<Record<string, string | string[] | undefined>>` 이고, 같은 키가 여러 번 오면 **배열**이다.
-- 쿠키 **쓰기(set/delete)는 Server Action·Route Handler·미들웨어에서만** 가능하다. 서버 컴포넌트 렌더 중에는 읽기만 된다 — 렌더 중 쓰기를 시도하면 런타임 에러다.
+- 쿠키 **쓰기(set/delete)는 Server Action·Route Handler·proxy 에서만** 가능하다. 서버 컴포넌트 렌더 중에는 읽기만 된다 — 렌더 중 쓰기를 시도하면 런타임 에러다.
 - 세션 쿠키는 **두 개**(access + refresh)이고 속성은 `httpOnly` · `sameSite: "lax"` · `path: "/"` · **`secure` 는 `NODE_ENV === "production"` 일 때만**이다(production 은 이름에 `__Host-` 프리픽스). ⚠️ localhost(http)에서 `secure` 를 켜면 쿠키가 저장되지 않아 **로그인이 무한 루프**가 된다. `maxAge` 는 백엔드 `TokenResponse` 의 `expires_in`(access 는 −60초)·`refresh_expires_in` 으로 **자동 동기화**된다. 이름·속성·maxAge 계산의 SSOT 는 **의존성 0 인 `lib/session-cookie.ts`** 다 — 삭제도 `delete()` 가 아니라 같은 속성으로 `maxAge: 0` 을 덮어쓴다(`__Host-` 조건).
 - Server Action 시그니처는 **`(prevState, formData) => Promise<State>`**, 폼 훅은 **`const [state, formAction, isPending] = useActionState(action, INITIAL_STATE)`**(3튜플)다. 액션은 **직렬화 가능한 상태 객체를 반환**하게 하고, 예외를 던져 500 으로 흘리지 마라.
 - ⛔ **`"use server"` 파일은 async 함수만 export 할 수 있다.** 폼 초기 상태 같은 **상수를 export 하면 빌드가 깨진다** — 클라이언트 컴포넌트 쪽에 두고(스켈레톤은 `components/LoginForm.tsx` 의 `INITIAL_STATE`), 액션 파일에서는 **타입만** 내보낸다(타입 export 는 컴파일 시 지워진다).
@@ -57,15 +57,17 @@ description: __PROJECT_NAME__ 의 고정 스택 버전과 버전별 주의사항
 - 서버 전용 fetch 래퍼는 **`cache: "no-store"` 고정**이다. ⛔ 사용자별 응답(`/auth/me`)을 Next Data Cache 에 올리면 **다른 사용자에게 캐시된 응답이 나간다.**
 - ⛔ Server Action 을 클라이언트에서 `fetch` 로 흉내내지 마라. 폼은 `<form action={...}>` 으로 연결한다. 폼이 없는 변경은 `useTransition()` + `startTransition(action)`.
 
-### `middleware.ts`
-- 인증 가드는 루트 `middleware.ts` 한 곳이다. `export const config = { matcher: [...] }` 로 대상을 정하고, access 쿠키가 있으면 통과(쿠키 **존재만** 확인 — 서명·만료 검증은 FastAPI 몫이다), access 가 없고 refresh 쿠키만 있으면 백엔드 `/auth/refresh` 로 **자동 갱신**(성공 시 두 쿠키 교체, 401 이면 파기, 네트워크·5xx 는 보존), 둘 다 없으면 `/login?next=<pathname+search>` 로 보낸다. ⛔ `lib/session.ts`·`lib/server/fastapi.ts` 를 import 하지 마라 — `server-only`·`next/headers` 가 Edge 번들로 끌려온다. 쿠키 상수는 의존성 0 인 `lib/session-cookie.ts` 에서 가져온다.
+### `proxy.ts` (구 `middleware.ts`)
+- Next 16 에서 `middleware` 파일 규약은 deprecated 되고 **`proxy`** 로 이름이 바뀌었다. 파일은 루트 `proxy.ts`, export 함수 이름은 `proxy` 다. ⛔ `middleware.ts` 를 새로 만들지 마라 — Next 16 이전 기준 문서·예제가 여전히 그 이름을 쓴다. 설정 플래그도 바뀌었다(`skipMiddlewareUrlNormalize` → `skipProxyUrlNormalize`).
+- proxy 는 **Node.js 런타임**에서 돈다. `export const runtime = ...` 은 proxy 파일에서 허용되지 않는다(빌드 에러).
+- 인증 가드는 루트 `proxy.ts` 한 곳이다. `export const config = { matcher: [...] }` 로 대상을 정하고, access 쿠키가 있으면 통과(쿠키 **존재만** 확인 — 서명·만료 검증은 FastAPI 몫이다), access 가 없고 refresh 쿠키만 있으면 백엔드 `/auth/refresh` 로 **자동 갱신**(성공 시 두 쿠키 교체, 401 이면 파기, 네트워크·5xx 는 보존), 둘 다 없으면 `/login?next=<pathname+search>` 로 보낸다. ⛔ `lib/session.ts`·`lib/server/fastapi.ts` 를 import 하지 마라. 그 둘은 렌더·Server Action 용이라 `cookies()`(`next/headers`)와 예외를 던지는 `redirect()` 를 쓰고, proxy 는 `NextRequest`·`NextResponse` 로 쿠키를 다룬다. 쿠키 상수는 의존성 0 인 `lib/session-cookie.ts` 에서 가져온다.
 - ⛔ **matcher 에서 `/login` 과 정적 자산을 제외하지 않으면 무한 리다이렉트**가 난다(로그인 페이지 자체가 다시 가드에 걸린다). 스켈레톤의 실제 값은 **제외 목록**이다:
   ```ts
   matcher: ["/((?!login(?:/|$)|_next/|.*\\.(?:ico|png|jpg|jpeg|gif|svg|webp|avif|css|js|map|txt|xml|json|webmanifest|woff2?)$).*)"]
   ```
   `login`(로그인 화면) · `_next/static`·`_next/image`(빌드 산출물·이미지 최적화) · `.*\.`(favicon.ico 처럼 **확장자가 있는** public 정적 파일)을 빼놓은 것이다. 공개 경로를 늘릴 땐 이 제외 목록에 더한다 — ⛔ 보호 경로를 나열하는 방식으로 바꾸면 새 라우트가 조용히 무방비가 된다.
 - ⚠️ **오픈 리다이렉트 방지**: `next` 파라미터를 그대로 `redirect()` 에 넣으면 외부 사이트로 유도할 수 있다. `lib/safe-redirect.ts` 로 **내부 경로만** 통과시킨다 — `/` 로 시작(이것만으로 `https:`·`javascript:` 스킴이 걸러진다)하고, 두 번째 문자가 `/`·`\` 가 아니며, 백슬래시·공백·제어문자가 없고, `/login` 자신이 아닌 것만. 그 외에는 `/` 로 떨어뜨리고(query·hash 는 보존), **이 검증 함수에는 테스트를 붙인다**(`lib/safe-redirect.test.ts`).
-- 미들웨어는 요청마다 돈다. 무거운 작업(DB·외부 API 호출)을 넣지 말고 쿠키 존재 확인 수준으로 유지한다. 유일한 예외가 refresh 자동 갱신인데, access 쿠키 만료 주기(기본 15분)에 한 번꼴이고 **타임아웃 5초**로 짧게 끊는다 — 백엔드가 응답을 물고 있으면 사이트 전체가 이 fetch 에 매달리기 때문이다.
+- proxy 는 요청마다 돈다. 무거운 작업(DB·외부 API 호출)을 넣지 말고 쿠키 존재 확인 수준으로 유지한다. 유일한 예외가 refresh 자동 갱신인데, access 쿠키 만료 주기(기본 15분)에 한 번꼴이고 **타임아웃 5초**로 짧게 끊는다 — 백엔드가 응답을 물고 있으면 사이트 전체가 이 fetch 에 매달리기 때문이다.
 
 ### Tailwind v4 + Next — `4.3`
 - ⛔ **`@tailwindcss/vite` 는 쓸 수 없다.** Next 는 Vite 가 아니다. → **`@tailwindcss/postcss`** 플러그인 + **`postcss.config.mjs`** 조합이다.
@@ -78,7 +80,7 @@ description: __PROJECT_NAME__ 의 고정 스택 버전과 버전별 주의사항
 - 실측 `tsconfig.json`: `moduleResolution: "bundler"` · `plugins: [{ "name": "next" }]` · **`baseUrl` 없이 `paths` 만으로** `@/*` → 프로젝트 루트(⛔ deprecated 된 `baseUrl` 을 되살리지 말 것) · `types` 는 **설정하지 않는다**(설정하는 순간 목록에 없는 `@types/*` 가 전부 빠져 `node:path` 를 쓰는 `vitest.config.ts` 부터 깨진다).
 - ⚠️ `next-env.d.ts` 는 **커밋하지 않는다**(빌드가 매번 생성). 이 파일이 없어도 `skipLibCheck` 덕에 `tsc --noEmit` 은 통과하므로, 생성 타입까지 보려면 **typecheck 뒤에 `next build` 까지** 돌려야 한다(CI 가 그렇게 한다).
 - 테스트 러너는 **Vitest** + **`@vitejs/plugin-react`** + **jsdom** + Testing Library(`vitest.config.ts` · `vitest.setup.ts` · `pnpm test`). 테스트는 대상 파일 옆에 `*.test.ts(x)`. ⚠️ Vitest 는 tsconfig 의 `paths` 를 읽지 않으므로 `resolve.alias` 에 `@` 를 **다시 적어야** 한다.
-- ⚠️ **서버 컴포넌트·Server Action·`middleware.ts` 는 Vitest 로 테스트하지 않는다.** jsdom 에는 RSC 런타임도 요청 컨텍스트(`cookies()`/`redirect()`)도 없고, `server-only` 를 import 하는 모듈(`lib/server/*`·`lib/session.ts`·`lib/actions/*`)은 러너에서 **로드조차 되지 않는다**. 모킹으로 통과시키면 "초록인데 실제로는 깨지는" 가짜 안전망이 된다. 실제로 덮은 범위는 **`lib/` 의 순수 함수(`safe-redirect`·`session-cookie`·`fastapi-error` 의 `*.test.ts`)와 `components/LoginForm.test.tsx`(클라이언트 폼 — Action 모듈은 `vi.mock`)** 뿐이고, 나머지는 `pnpm build` + 수동 동작 확인으로 대신한다.
+- ⚠️ **서버 컴포넌트·Server Action·`proxy.ts` 는 Vitest 로 테스트하지 않는다.** jsdom 에는 RSC 런타임도 요청 컨텍스트(`cookies()`/`redirect()`)도 없고, `server-only` 를 import 하는 모듈(`lib/server/*`·`lib/session.ts`·`lib/actions/*`)은 러너에서 **로드조차 되지 않는다**. 모킹으로 통과시키면 "초록인데 실제로는 깨지는" 가짜 안전망이 된다. 실제로 덮은 범위는 **`lib/` 의 순수 함수(`safe-redirect`·`session-cookie`·`fastapi-error` 의 `*.test.ts`)와 `components/LoginForm.test.tsx`(클라이언트 폼 — Action 모듈은 `vi.mock`)** 뿐이고, 나머지는 `pnpm build` + 수동 동작 확인으로 대신한다.
 
 ### FastAPI 0.141 + Starlette 1.x
 - TestClient 는 **httpx2** 를 쓴다(httpx 아님). `requirements.txt` 에 `httpx2`. ⛔ `httpx` 로 되돌리면 deprecation 경고.

@@ -12,7 +12,7 @@ import type { TokenResponse } from "@/lib/types"
 // 나가기 전에 리다이렉트되므로, 미인증 사용자에게 보호 화면이 한 프레임도 깜빡이지 않는다.
 //
 // ⚠️ access 쿠키는 **존재만** 확인한다. 서명 검증은 하지 않는다.
-//    - middleware 는 모든 요청마다 돈다. 매번 FastAPI 에 물어보면 요청이 2배가 된다.
+//    - proxy 는 모든 요청마다 돈다. 매번 FastAPI 에 물어보면 요청이 2배가 된다.
 //    - JWT 서명키(SECRET_KEY)는 백엔드 것이다. Next 에 복제하면 비밀이 두 곳으로 늘어난다.
 //    실제 권한 판정은 언제나 FastAPI 가 한다(401 → lib/session.ts 의 getSessionUser 가 처리).
 //
@@ -20,8 +20,13 @@ import type { TokenResponse } from "@/lib/types"
 // access 쿠키 maxAge 가 토큰보다 60초 짧아(accessCookieMaxAge) 만료가 이 경로로 선제 감지되고,
 // 사용자는 재로그인 없이 세션이 이어진다. refresh 는 15분에 한 번꼴이라 요청 2배 문제가 없다.
 //
-// ⛔ lib/session.ts·lib/server/fastapi.ts 를 import 하지 마라 — server-only·next/headers 가
-//    Edge 번들로 끌려온다(lib/session-cookie.ts 머리 주석). 여기서는 fetch/Web API 만 쓴다.
+// ⛔ lib/session.ts·lib/server/fastapi.ts 를 import 하지 마라. 그 둘은 렌더·Server Action 용이다 —
+//    쿠키는 next/headers 의 cookies() 로, 이동은 NEXT_REDIRECT 를 던지는 redirect() 로 다룬다.
+//    proxy 는 NextRequest 로 읽고 NextResponse 로 쓰고 리다이렉트한다. 서버 래퍼는 production 에서
+//    FASTAPI_URL 이 없으면 throw 한다(아래 fastapiBaseUrl 참고). 공유할 것은 의존성 0 인
+//    lib/session-cookie.ts 에서만 가져오고, 여기서는 fetch/Web API 만 쓴다.
+//
+// Next 16 의 proxy 는 Node.js 런타임에서 돈다. `runtime` 설정은 proxy 파일에서 허용되지 않는다(빌드 에러).
 
 /**
  * FastAPI 베이스 URL — lib/server/fastapi.ts 의 baseUrl() 과 같은 규칙의 최소 복제다(위 ⛔ 참고).
@@ -33,7 +38,7 @@ function fastapiBaseUrl(): string {
 }
 
 /**
- * refresh 응답 대기 상한(ms). middleware 는 모든 보호 요청의 길목이다 — 백엔드가 연결만 받고
+ * refresh 응답 대기 상한(ms). proxy 는 모든 보호 요청의 길목이다 — 백엔드가 연결만 받고
  * 응답을 물고 있으면(DB 락·스레드풀 고갈) 사이트 전체가 이 fetch 에 매달리므로 짧게 끊는다.
  */
 const REFRESH_TIMEOUT_MS = 5_000
@@ -58,7 +63,7 @@ function expireSessionCookies(response: NextResponse): void {
   response.cookies.set(REFRESH_COOKIE, "", sessionCookieOptions(0))
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   // access 쿠키가 있으면 통과 — 존재만 본다(파일 머리 주석).
   if (request.cookies.has(SESSION_COOKIE)) return NextResponse.next()
 

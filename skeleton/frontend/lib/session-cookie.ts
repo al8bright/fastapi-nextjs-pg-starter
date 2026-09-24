@@ -1,13 +1,12 @@
 // 세션 쿠키의 이름과 공통 속성만 담는 모듈 — **의존성이 없어야 한다**.
 //
-// middleware 는 Edge 런타임에서 요청마다 돈다. 상수 하나를 쓰려고 lib/session.ts 를 import 하면
-// 그 파일이 물고 있는 `server-only`·`next/headers`·`next/navigation`·FastAPI 래퍼가 전부
-// Edge 번들에 끌려온다 (side-effect import 라 트리셰이킹되지 않는다).
-// Next 가 middleware 레이어에서 `server-only` 를 무해하게 처리해 주는 데 기대는 구조라
-// 버전이 바뀌면 조용히 깨진다 — 그래서 상수와 순수 함수만 여기로 분리한다.
+// 이 모듈을 쓰는 곳은 세 군데다 — proxy.ts(요청 단계), lib/session.ts(Server Action·서버 컴포넌트),
+// 그리고 Vitest(lib/session-cookie.test.ts). lib/session.ts 는 `server-only`·`next/headers`·
+// `next/navigation`·FastAPI 래퍼를 물고 있어 proxy 가 쓰기엔 렌더 전용 API 투성이고,
+// Vitest 에서는 로드조차 되지 않는다. 그래서 상수와 순수 함수만 여기로 분리한다.
 //
-// ⛔ 이 파일에는 어떤 import 도 추가하지 마라.
-//    환경 판별도 process.env.NODE_ENV 만 쓴다 — Edge/서버 어느 쪽에서도 빌드 시점에 정적으로 치환된다.
+// ⛔ 이 파일에는 어떤 import 도 추가하지 마라 — 세 소비자 중 하나라도 끌려오는 순간 깨진다.
+//    환경 판별도 process.env.NODE_ENV 만 쓴다 — 어느 소비자에서든 빌드 시점에 정적으로 치환된다.
 
 const IS_PRODUCTION = process.env.NODE_ENV === "production"
 
@@ -35,8 +34,8 @@ export const REFRESH_COOKIE = withHostPrefix("__PROJECT_SNAKE___refresh", IS_PRO
 /**
  * access 쿠키 maxAge(초) — 토큰 유효기간(expires_in)보다 **60초 짧게** 잡는다.
  *
- * 쿠키가 토큰보다 먼저 죽어야 middleware 가 "access 쿠키 없음 → refresh" 경로로
- * 만료를 **선제** 감지한다. 쿠키가 토큰보다 오래 살면 middleware 는 통과시키는데
+ * 쿠키가 토큰보다 먼저 죽어야 proxy 가 "access 쿠키 없음 → refresh" 경로로
+ * 만료를 **선제** 감지한다. 쿠키가 토큰보다 오래 살면 proxy 는 통과시키는데
  * FastAPI 가 401 을 주는 구간이 생기고, 아슬아슬하게 같으면 렌더 도중 만료돼
  * 페이지 절반만 그려지다 로그인으로 튕긴다.
  *
@@ -50,7 +49,7 @@ export function accessCookieMaxAge(expiresInSeconds: number): number {
 /**
  * 두 세션 쿠키의 공통 속성 (architecture.md §14 세션 쿠키 속성).
  *
- * lib/session.ts(Server Action)와 middleware.ts(Edge)가 **같은 속성**으로 굽지 않으면
+ * lib/session.ts(Server Action)와 proxy.ts(요청 단계)가 **같은 속성**으로 굽지 않으면
  * 같은 이름·다른 속성의 쿠키가 공존해 "로그아웃했는데 세션이 남는" 상태가 된다 —
  * 그래서 속성을 이 한 곳에서만 만든다. production 의 secure 는 `__Host-` 프리픽스의
  * 강제 조건이기도 하다(withHostPrefix 참고). 삭제할 때도 이 속성으로 maxAge 0 을 덮어써야

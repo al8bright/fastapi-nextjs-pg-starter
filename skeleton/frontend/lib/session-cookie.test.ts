@@ -9,7 +9,7 @@ import {
 
 // 쿠키 이름·수명 규칙 회귀 테스트 (architecture.md §14 세션 쿠키 속성).
 // 여기가 깨지면 production 에서 쿠키가 브라우저에게 조용히 버려지거나(__Host- 조건 위반),
-// middleware 의 만료 선제 감지(refresh 경로)가 무너진다.
+// proxy 의 만료 선제 감지(refresh 경로)가 무너진다.
 describe("withHostPrefix", () => {
   it("production 에서는 __Host- 프리픽스를 붙인다 (서브도메인 쿠키 주입 차단)", () => {
     expect(withHostPrefix("app_session", true)).toBe("__Host-app_session")
@@ -31,7 +31,7 @@ describe("쿠키 이름", () => {
 })
 
 describe("accessCookieMaxAge", () => {
-  it("토큰 유효기간보다 60초 짧다 (쿠키가 먼저 죽어야 middleware 가 만료를 선제 감지한다)", () => {
+  it("토큰 유효기간보다 60초 짧다 (쿠키가 먼저 죽어야 proxy 가 만료를 선제 감지한다)", () => {
     expect(accessCookieMaxAge(15 * 60)).toBe(14 * 60)
   })
 

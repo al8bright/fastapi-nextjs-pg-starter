@@ -8,7 +8,7 @@ import "server-only"
 //   - CORS 가 필요 없고,
 //   - JWT 가 브라우저 JS 에 노출되지 않으며,
 //   - 401 을 만나도 `location.href` 로 튕길 수 없다(서버에는 location 이 없다).
-//     세션 만료 처리는 middleware(쿠키 없음) + 각 페이지의 redirect("/login") 이 담당한다.
+//     세션 만료 처리는 proxy(쿠키 없음) + 각 페이지의 redirect("/login") 이 담당한다.
 //
 // ⛔ `import "server-only"` 를 지우지 마라. 이 모듈이 클라이언트 컴포넌트 그래프로 흘러들면
 //    FASTAPI_URL(내부 주소)과 JWT 가 브라우저 번들에 실린다. server-only 는 그때 **빌드를 깨뜨려**

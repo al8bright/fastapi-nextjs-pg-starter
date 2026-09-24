@@ -1,6 +1,6 @@
 ---
 name: add-frontend-feature
-description: __PROJECT_NAME__ 프론트엔드(Next.js App Router)에 기능·페이지·데이터 조회/변경을 추가할 때 사용. 서버 컴포넌트 직접 fetch + Server Action + httpOnly 쿠키 세션 표준(lib/types.ts → lib/server/<domain>.ts → app/<route>/page.tsx → lib/actions/<domain>.ts)과 middleware 보호 라우트를 architecture.md §13·§14 기준으로 안내한다.
+description: __PROJECT_NAME__ 프론트엔드(Next.js App Router)에 기능·페이지·데이터 조회/변경을 추가할 때 사용. 서버 컴포넌트 직접 fetch + Server Action + httpOnly 쿠키 세션 표준(lib/types.ts → lib/server/<domain>.ts → app/<route>/page.tsx → lib/actions/<domain>.ts)과 proxy 보호 라우트를 architecture.md §13·§14 기준으로 안내한다.
 ---
 
 # 프론트엔드 기능 추가
@@ -148,11 +148,11 @@ description: __PROJECT_NAME__ 프론트엔드(Next.js App Router)에 기능·페
    }
    ```
    - 폼이 없는 변경(버튼 하나로 끝나는 삭제·로그아웃)은 `useTransition()` + `startTransition(someAction)` 으로 부른다(`components/LogoutButton.tsx`).
-   - ⛔ Server Action 을 클라이언트에서 `fetch` 로 흉내내지 말 것. ⛔ 서버 컴포넌트 렌더 중에 쿠키를 **쓰지** 마라 — 쿠키 쓰기는 Server Action(또는 미들웨어)에서만 가능하다(§14).
+   - ⛔ Server Action 을 클라이언트에서 `fetch` 로 흉내내지 말 것. ⛔ 서버 컴포넌트 렌더 중에 쿠키를 **쓰지** 마라 — 쿠키 쓰기는 Server Action(또는 proxy)에서만 가능하다(§14).
 
-5. **보호 라우트** `frontend/middleware.ts`
+5. **보호 라우트** `frontend/proxy.ts`
    - matcher 는 **제외 목록(negative lookahead)** 이다 — 새 라우트는 기본적으로 보호된다. 페이지마다 가드를 손으로 넣지 않는다.
-   - access 쿠키(`SESSION_COOKIE`)의 **존재만** 확인하고 통과시킨다. 서명 검증·만료 확인은 하지 않는다(실제 판정은 FastAPI 가 한다, §14). access 가 없고 refresh 쿠키(`REFRESH_COOKIE`)만 있으면 백엔드 `/auth/refresh` 로 **자동 갱신**하고(성공 시 두 쿠키 교체 후 통과, 401 이면 쿠키 파기), 둘 다 없으면 `/login?next=<pathname+search>` 로 보낸다. ⛔ 이 refresh 로직을 페이지·액션에 복제하지 마라 — middleware 한 곳이다.
+   - access 쿠키(`SESSION_COOKIE`)의 **존재만** 확인하고 통과시킨다. 서명 검증·만료 확인은 하지 않는다(실제 판정은 FastAPI 가 한다, §14). access 가 없고 refresh 쿠키(`REFRESH_COOKIE`)만 있으면 백엔드 `/auth/refresh` 로 **자동 갱신**하고(성공 시 두 쿠키 교체 후 통과, 401 이면 쿠키 파기), 둘 다 없으면 `/login?next=<pathname+search>` 로 보낸다. ⛔ 이 refresh 로직을 페이지·액션에 복제하지 마라 — proxy 한 곳이다.
    - ⛔ matcher 에서 `/login`·`_next/static`·`_next/image`·**확장자가 있는 정적 파일**을 빼지 않으면 무한 리다이렉트다(`/login` 요청 → 쿠키 없음 → `/login` → …).
    ```ts
    export const config = {
@@ -168,12 +168,12 @@ description: __PROJECT_NAME__ 프론트엔드(Next.js App Router)에 기능·페
    - 대상 파일 옆에 `*.test.ts(x)`(`vitest.config.ts` 의 include 는 `{app,components,lib}/**/*.test.{ts,tsx}`). 우선순위는 **`lib/` 의 순수 함수**(특히 `safe-redirect`, 에러 메시지 매핑, 타입 가드)와 **클라이언트 컴포넌트**(폼이 Action 에 넘기는 FormData, 오류 표시, 대기 중 비활성)다. 스켈레톤의 예시는 `lib/safe-redirect.test.ts`·`lib/session-cookie.test.ts`·`lib/fastapi-error.test.ts`(순수 함수)와 `components/LoginForm.test.tsx`(클라이언트 폼) 네 개다.
    - ⛔ `lib/server/*`·`lib/session.ts`·`lib/actions/*` 는 `server-only` 를 끌고 와 러너에서 **로드조차 되지 않는다.** 클라이언트 컴포넌트 테스트는 Action 모듈을 통째로 `vi.mock` 해서 끊는다(`vi.mock("@/lib/actions/auth", …)`).
    - ⚠️ **서버 컴포넌트와 Server Action 은 러너 밖의 Next 런타임(요청 컨텍스트·`cookies()`·캐시)에 의존한다.** **억지로 테스트를 만들지 마라** — 무리하게 모킹한 테스트는 구현을 고정할 뿐 회귀를 못 잡는다. 대신 로직을 순수 함수로 뽑아 그것을 테스트하고, 통합 확인은 `pnpm build` + 수동 동작 확인으로 대신한다.
-   - `tsc --noEmit`·`eslint` 가 못 잡는 **런타임 동작**을 고정한다 — §14 가 ⛔ 로 규정한 것들 중 **러너에서 검증 가능한 것**(오픈 리다이렉트 통과, 복귀 경로의 query 보존, 로그인 실패 문구 표시)이 1순위다. 미인증 접근 차단은 middleware 몫이라 여기서 덮지 못한다 — `pnpm build` 후 수동으로 확인한다.
+   - `tsc --noEmit`·`eslint` 가 못 잡는 **런타임 동작**을 고정한다 — §14 가 ⛔ 로 규정한 것들 중 **러너에서 검증 가능한 것**(오픈 리다이렉트 통과, 복귀 경로의 query 보존, 로그인 실패 문구 표시)이 1순위다. 미인증 접근 차단은 proxy 몫이라 여기서 덮지 못한다 — `pnpm build` 후 수동으로 확인한다.
 
 ## 인증/세션 (§14)
 
 - 세션은 **httpOnly 쿠키 2개**다 — access `SESSION_COOKIE`(`<project>_session`) + refresh `REFRESH_COOKIE`(`<project>_refresh`). production 은 `__Host-` 프리픽스가 붙는다. ⛔ `localStorage`·전역 스토어에 토큰을 복제하지 마라 — 클라이언트에서는 읽을 수 없는 게 정상이다.
-- 쿠키 이름·속성·maxAge 계산은 **의존성 0 인 `lib/session-cookie.ts`** 한 곳에서만 만든다(middleware/Edge 와 공유 — ⛔ 이 파일에 import 를 추가하지 마라). read/set/clear 는 `lib/session.ts` 한 경로로만. 쓰기(set/clear)는 **Server Action·Route Handler 안에서만** 가능하다(서버 컴포넌트 렌더 중에는 예외가 난다).
+- 쿠키 이름·속성·maxAge 계산은 **의존성 0 인 `lib/session-cookie.ts`** 한 곳에서만 만든다(proxy·Vitest 와 공유 — ⛔ 이 파일에 import 를 추가하지 마라). read/set/clear 는 `lib/session.ts` 한 경로로만. 쓰기(set/clear)는 **Server Action·Route Handler 안에서만** 가능하다(서버 컴포넌트 렌더 중에는 예외가 난다).
 - **`cookies()` 는 async 다** — `await` 한 store 에서 읽고 쓴다.
   ```ts
   // lib/session.ts (요약)
@@ -186,7 +186,7 @@ description: __PROJECT_NAME__ 프론트엔드(Next.js App Router)에 기능·페
     return store.get(SESSION_COOKIE)?.value ?? null
   }
   ```
-- 쿠키 속성은 `httpOnly` · `sameSite: "lax"` · `path: "/"` · **`secure` 는 production 에서만**이다. ⚠️ localhost(http)에서 `secure` 를 켜면 쿠키가 저장되지 않아 **로그인이 무한 루프**가 된다. maxAge 는 백엔드 `TokenResponse` 값으로 **자동 동기화**된다 — access 는 `expires_in − 60초`(쿠키가 토큰보다 먼저 죽어야 middleware 가 만료를 선제 감지한다), refresh 는 `refresh_expires_in`. 삭제는 `delete()` 가 아니라 **같은 속성으로 `maxAge: 0` 덮어쓰기**다(`__Host-` 조건, `clearSessionTokens`).
+- 쿠키 속성은 `httpOnly` · `sameSite: "lax"` · `path: "/"` · **`secure` 는 production 에서만**이다. ⚠️ localhost(http)에서 `secure` 를 켜면 쿠키가 저장되지 않아 **로그인이 무한 루프**가 된다. maxAge 는 백엔드 `TokenResponse` 값으로 **자동 동기화**된다 — access 는 `expires_in − 60초`(쿠키가 토큰보다 먼저 죽어야 proxy 가 만료를 선제 감지한다), refresh 는 `refresh_expires_in`. 삭제는 `delete()` 가 아니라 **같은 속성으로 `maxAge: 0` 덮어쓰기**다(`__Host-` 조건, `clearSessionTokens`).
 - 로그인: `LoginForm`(클라) → `loginAction` → `POST /auth/login`(JSON) → 응답의 access·refresh 를 `setSessionTokens()` 로 두 쿠키에 저장 → `redirect(safeRedirect(next))` 로 원래 위치(없으면 `/`) 이동.
 - 로그아웃: `LogoutButton`(클라) → `logoutAction` → 백엔드 `POST /auth/logout` 으로 refresh 폐기(**best-effort** — 멱등 204·인증 불요) → `clearSessionTokens()` 로 두 쿠키 삭제 → `/login` 이동. ⛔ 클라이언트에서 쿠키를 지우려 하지 마라(httpOnly 라 불가능하다).
 - 사용자 정보는 **필요한 화면의 서버 컴포넌트에서 `getSessionUser("<현재경로>")` 로 그때 조회**한다. ⛔ 로그인 직후 사용자 정보를 미리 당겨와 전역에 심는 패턴 금지 — 중복 요청과 stale 세션의 원인이다.

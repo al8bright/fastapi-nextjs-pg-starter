@@ -10,7 +10,7 @@ const isProduction = process.env.NODE_ENV === "production"
 
 // CSP 는 Next 런타임 요구를 감안한 **현실적 기본값**이다:
 //   - script-src 'unsafe-inline' : Next 는 하이드레이션 데이터·런타임 부트스트랩을 인라인
-//     <script> 로 심는다. nonce 로 조이려면 요청마다 middleware 에서 CSP 헤더를 생성하는
+//     <script> 로 심는다. nonce 로 조이려면 요청마다 proxy 에서 CSP 헤더를 생성하는
 //     방식으로 넘어가야 한다(정적 headers() 로는 불가능) — 필요해지면 그때 전환한다.
 //   - 'unsafe-eval' 은 dev 전용 : HMR/React Refresh 가 eval 을 쓴다. production 에서는 뺀다.
 //   - style-src 'unsafe-inline' : Next 가 스트리밍 중 인라인 스타일을 쓰고, 라이브러리의

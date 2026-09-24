@@ -5,6 +5,27 @@
 
 ---
 
+## 2026-09-25 — 인증 가드 `middleware.ts` → `proxy.ts` 전환, 스킬 정정
+
+### Changed (변경)
+
+- **`frontend/middleware.ts` → `frontend/proxy.ts`** — Next 16 에서 `middleware` 파일 규약이 deprecated 되고
+  `proxy` 로 이름이 바뀐 데 따른 전환이다(export 함수도 `proxy`). 동작은 그대로이며 `next build` 의
+  deprecated 경고가 사라졌다. proxy 는 Node.js 런타임에서 돌기 때문에 "Edge 번들 오염"을 근거로 삼던
+  주석·문서를 고쳤다. `lib/session-cookie.ts` 의 의존성 0 규칙은 유지한다 — 이제 근거는
+  proxy·Vitest 가 함께 쓴다는 점이다. `docs/architecture.md`·스킬·README·`CLAUDE.md` 를 동기화했고,
+  `PLAN.md` 의 전환 TODO 는 완료되어 삭제했다.
+- 검증: 임시 스캐폴드 → lint·typecheck·vitest 29개·build(경고 없음) 통과. `next start` + 가짜 백엔드로
+  쿠키 없음 307(query 보존)·`/login` 200·refresh 성공 시 쿠키 회전 후 통과·refresh 401 시 쿠키 파기·
+  백엔드 다운 시 쿠키 보존 리다이렉트를 확인했다.
+
+### Fixed (수정)
+
+- **스킬 정정 (prompt-audit)** — `stack-versions` 가 프론트 테스트를 2개로 적던 것을 실제 4개로 맞췄다.
+  `add-backend-domain` 예시의 미사용 `Integer` import(ruff F401)를 제거했다. `add-frontend-feature` 에서는
+  삭제된 SPA 판 비교의 잔재 문구를 정리하고, 트리거 설명(description)에 있던 금지 규칙을 뺐고(본문에 이미 있다),
+  중복된 ⛔ 줄은 이유를 붙인 한 문장으로 합쳤다. `pr-workflow` 의 push 전 검증 명령에 macOS/Linux 판을 추가했다.
+
 ## 2026-09-24 — 스택 최신화(FastAPI 0.141·Next 16.3.6)와 스캐폴드 복사·치환 결함 수정
 
 ### Changed (변경)

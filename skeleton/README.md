@@ -104,12 +104,12 @@ flowchart LR
 
 ## 인증과 기본 계정
 
-이 프로젝트는 username/password 로그인을 기본 제공한다. FastAPI는 로그인 시 **access JWT(기본 15분)** 와 **DB 세션 기반 refresh 토큰(기본 14일, 불투명 문자열)** 쌍을 발급하고, Next가 이를 httpOnly 쿠키 두 개에 저장한다(운영에서는 `__Host-` 프리픽스). 이후 FastAPI 서버 요청에는 access 토큰을 Bearer로 전달하며, access 쿠키가 만료되면 `middleware.ts`가 refresh 토큰으로 새 쌍을 받아 자동 갱신한다(회전 방식 — 재사용이 감지되면 세션이 폐기된다). 로그아웃은 백엔드에서 refresh 세션을 폐기해 access 토큰도 즉시 무효화한다. 로그인은 계정별 시도 제한(기본 5회 실패 시 15분 잠금, 429)으로 보호되고 보안 이벤트는 `app.audit` 로거에 남는다. 처음 백엔드를 실행할 때 `admin` 계정이 없으면 개발용 관리자 **`admin`** 이 시드된다. 비밀번호는 스캐폴드가 무작위로 생성해 `backend/.env` 의 `DEFAULT_ADMIN_PASSWORD` 에 넣는다.
+이 프로젝트는 username/password 로그인을 기본 제공한다. FastAPI는 로그인 시 **access JWT(기본 15분)** 와 **DB 세션 기반 refresh 토큰(기본 14일, 불투명 문자열)** 쌍을 발급하고, Next가 이를 httpOnly 쿠키 두 개에 저장한다(운영에서는 `__Host-` 프리픽스). 이후 FastAPI 서버 요청에는 access 토큰을 Bearer로 전달하며, access 쿠키가 만료되면 `proxy.ts`가 refresh 토큰으로 새 쌍을 받아 자동 갱신한다(회전 방식 — 재사용이 감지되면 세션이 폐기된다). 로그아웃은 백엔드에서 refresh 세션을 폐기해 access 토큰도 즉시 무효화한다. 로그인은 계정별 시도 제한(기본 5회 실패 시 15분 잠금, 429)으로 보호되고 보안 이벤트는 `app.audit` 로거에 남는다. 처음 백엔드를 실행할 때 `admin` 계정이 없으면 개발용 관리자 **`admin`** 이 시드된다. 비밀번호는 스캐폴드가 무작위로 생성해 `backend/.env` 의 `DEFAULT_ADMIN_PASSWORD` 에 넣는다.
 
 > [!CAUTION]
 > **시드 관리자는 로컬 개발 전용이다. 배포 전 `APP_ENV=production` 으로 두고 `SECRET_KEY` 를 교체하며 `SEED_DEFAULT_ADMIN=false` 로 끈다 — 두 조건을 어기면 백엔드가 기동을 거부한다.** 전체 항목은 [`docs/architecture.md`의 배포 전 체크리스트](docs/architecture.md#배포-전-체크리스트-스타터-기본값-제거--must)를 확인한다.
 
-`middleware.ts`는 access 쿠키가 없고 refresh 쿠키만 있으면 백엔드로 자동 갱신을 시도하고, 둘 다 없거나 갱신이 401이면 `/login`으로 보낸다. 로그인 성공 후에는 검증된 내부 목적지 또는 홈으로 이동시킨다. `users.role`과 백엔드의 `require_admin` 의존성으로 관리자 API를 보호한다. 프론트는 전 경로에 보안 응답 헤더(CSP, `X-Frame-Options: DENY`, nosniff, Referrer-Policy, Permissions-Policy, 운영 HSTS)를 내보낸다(`next.config.ts`).
+`proxy.ts`는 access 쿠키가 없고 refresh 쿠키만 있으면 백엔드로 자동 갱신을 시도하고, 둘 다 없거나 갱신이 401이면 `/login`으로 보낸다. 로그인 성공 후에는 검증된 내부 목적지 또는 홈으로 이동시킨다. `users.role`과 백엔드의 `require_admin` 의존성으로 관리자 API를 보호한다. 프론트는 전 경로에 보안 응답 헤더(CSP, `X-Frame-Options: DENY`, nosniff, Referrer-Policy, Permissions-Policy, 운영 HSTS)를 내보낸다(`next.config.ts`).
 
 ```mermaid
 sequenceDiagram

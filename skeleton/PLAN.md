@@ -12,7 +12,7 @@
 - [ ] Alembic 초기화 + 초기 마이그레이션
 - [ ] `pytest` + SQLite in-memory + `conftest.py` 픽스처
 - [ ] 프론트 골격: `app/` App Router, `lib/server/fastapi.ts` 서버 fetch 래퍼, `lib/session.ts` 쿠키
-- [ ] `middleware.ts` 쿠키 기반 인증 가드 + 오픈 리다이렉트 방지
+- [ ] `proxy.ts` 쿠키 기반 인증 가드 + 오픈 리다이렉트 방지
 - [ ] Tailwind v4 `@theme`, `@tailwindcss/postcss` + `app/globals.css`, pnpm, ESLint
 - [ ] TypeScript 타입 검사 (`tsc --noEmit`)
 - [ ] `.github/workflows/ci.yml` 동작 확인 (push 이후 사후 안전망 — 게이트는 push 전 로컬 검증)
@@ -67,9 +67,6 @@
 - [ ] **의존성 취약점 대응 루틴**: CI 의 `backend-audit`(pip-audit)·`frontend-audit`(pnpm audit)는
       **경고성**이라 실패해도 초록이다 — 주기적으로 로그의 경고를 확인하고 stack-versions §5
       절차로 패치한다.
-- [ ] **Next `middleware.ts` → `proxy` 마이그레이션**: Next 16.3 에서 deprecated. 제거되는
-      메이저로 올리면 인증 가드·자동 refresh 가 조용히 무동작이 된다 — **Next 메이저 상향 전
-      필수** (`npx @next/codemod@canary middleware-to-proxy .`, §14·stack-versions 스킬 함께 갱신).
 - [ ] **템플릿 스냅샷 인지**: 이 프로젝트는 `fastapi-nextjs-pg-starter` 의 생성 시점 스냅샷이다.
       이후 템플릿의 버그픽스·개선은 자동 반영되지 않으므로 필요 시 수동으로 가져온다
       (재스캐폴드는 파괴적 덮어쓰기라 금지).

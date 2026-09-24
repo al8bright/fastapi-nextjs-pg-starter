@@ -19,7 +19,7 @@
 - **API는 `/api/v1`**: 설정은 `get_settings()`와 `@lru_cache`, 공통 의존성은 `app/dependencies.py`에 둔다.
 - **계층 분리**: 라우터는 HTTP 처리만 담당하고, 도메인 로직은 `services/`, 검증은 `schemas/`에 둔다.
 - **프론트엔드**: 서버 컴포넌트 fetch + Server Actions를 사용하고 패키지 매니저는 **pnpm**으로 통일한다.
-- **인증**: 자체 계정 로그인이 기본이다. 브라우저↔Next는 httpOnly 쿠키 2개(access+refresh), Next↔FastAPI는 Bearer access JWT를 사용한다. refresh 토큰은 DB 세션(`auth_sessions`) 기반 불투명 토큰으로 회전·즉시 폐기되며, 갱신은 `middleware.ts`가 자동 수행한다(상세는 architecture.md §9·§14).
+- **인증**: 자체 계정 로그인이 기본이다. 브라우저↔Next는 httpOnly 쿠키 2개(access+refresh), Next↔FastAPI는 Bearer access JWT를 사용한다. refresh 토큰은 DB 세션(`auth_sessions`) 기반 불투명 토큰으로 회전·즉시 폐기되며, 갱신은 `proxy.ts`가 자동 수행한다(상세는 architecture.md §9·§14).
 - **변경 흐름**: `main`에서 작업하고 바로 커밋·push 한다. 브랜치와 PR은 선택이다(되돌리기 어렵거나 광범위한 변경, 리뷰가 필요할 때). ⛔ **push 전 테스트·린트 통과가 유일한 게이트**다 — CI는 push 이후 도는 사후 안전망이다. 하나의 커밋에는 Structural 또는 Behavioral 한 유형만 담는다.
 
 ## 작업 방식

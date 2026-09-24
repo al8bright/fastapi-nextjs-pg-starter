@@ -53,7 +53,7 @@
 | **DB 테이블명** | `snake_case` **복수형**. 외부(ERP 등) 연동 테이블은 접미사로 출처 표기 | `admins`, `events`, `orders_erp` |
 | **Python 모듈 파일** | `snake_case`, 모델은 **단수** | `order.py`, `auth_service.py` |
 | **프론트 컴포넌트 파일** | `PascalCase.tsx`, 파일명 = 컴포넌트명 | `LoginForm.tsx`, `EventCalendar.tsx` |
-| **App Router 라우트 파일** | 프레임워크 규약 파일명은 **소문자 고정**(임의 변경 불가) | `page.tsx`, `layout.tsx`, `route.ts`, `middleware.ts` |
+| **App Router 라우트 파일** | 프레임워크 규약 파일명은 **소문자 고정**(임의 변경 불가) | `page.tsx`, `layout.tsx`, `route.ts`, `proxy.ts` |
 | **라우트 디렉토리** | `kebab-case` (URL 경로가 그대로 된다) | `app/my/`, `app/order-history/` |
 | **환경변수 접두** | 백엔드는 `UPPER_SNAKE`. 프론트는 **서버 전용이 기본이라 접두 없음**, 클라이언트 노출이 꼭 필요할 때만 `NEXT_PUBLIC_` | `DATABASE_URL`, `FASTAPI_URL`, `NEXT_PUBLIC_SITE_NAME` |
 | **세션 쿠키 이름** | access `<project>_session` + refresh `<project>_refresh` 로 충돌 방지 (httpOnly 쿠키 2개, production 은 `__Host-` 프리픽스 §14) | `my_project_session`, `my_project_refresh` |
@@ -81,7 +81,7 @@
 - **라우팅**: App Router 파일 시스템 라우팅 (`app/**/page.tsx`, 공통 셸은 `app/layout.tsx`)
 - **데이터 페칭**: **서버 컴포넌트에서 직접 `fetch`** — 서버 전용 래퍼 `lib/server/fastapi.ts` 를 통해 FastAPI 호출
 - **변경(mutation)**: **Server Actions** (`'use server'`, `lib/actions/*.ts`)
-- **인증 가드**: 루트 `middleware.ts` 에서 세션 쿠키 검사(access 없고 refresh 만 있으면 자동 갱신 §14) → `/login?next=<원래경로>` 리다이렉트
+- **인증 가드**: 루트 `proxy.ts` 에서 세션 쿠키 검사(access 없고 refresh 만 있으면 자동 갱신 §14) → `/login?next=<원래경로>` 리다이렉트
 - **HTTP**: 표준 `fetch`. ⛔ `axios` 안 쓴다
 - **서버 상태**: 서버 컴포넌트 렌더 + `revalidatePath`. ⛔ 쿼리 캐시 라이브러리(React Query 등) 안 쓴다
 - **클라이언트 상태**: **전역 스토어 없음.** 세션의 유일한 출처는 httpOnly 쿠키, 나머지는 지역 `useState`. ⛔ Zustand 등 전역 스토어 안 쓴다
@@ -90,7 +90,7 @@
 - **타입체크**: `tsc --noEmit` (`pnpm typecheck`)
 - **린트**: ESLint flat config — `eslint-config-next`(core-web-vitals + typescript) + `@eslint/js` (`eslint.config.mjs`, `pnpm lint`)
 - **테스트**: Vitest `5.0` + `@vitejs/plugin-react` + jsdom + Testing Library (`vitest.config.ts`, `pnpm test` / `pnpm test:watch`)
-- **배포 런타임**: **Node 런타임**이 필요하다 — `next build` → `next start`. ⛔ 정적 호스팅(순수 파일 서빙)으로는 서버 컴포넌트·Server Action·`middleware.ts` 가 동작하지 않는다
+- **배포 런타임**: **Node 런타임**이 필요하다 — `next build` → `next start`. ⛔ 정적 호스팅(순수 파일 서빙)으로는 서버 컴포넌트·Server Action·`proxy.ts` 가 동작하지 않는다
 
 > 프론트 표준은 **서버 컴포넌트 fetch + Server Actions** 로 통일한다.
 > ⛔ **브라우저에서 FastAPI 를 직접 호출하지 않는다.** 브라우저는 Next 하고만 통신하고, FastAPI 호출은 전부 서버에서 일어난다.
@@ -116,7 +116,7 @@
 │   ├── app/                     # App Router (page/layout/globals.css)
 │   ├── components/              # 'use client' 컴포넌트
 │   ├── lib/                     # server fetch 래퍼 · session · actions
-│   ├── middleware.ts            # 쿠키 기반 인증 가드
+│   ├── proxy.ts            # 쿠키 기반 인증 가드
 │   ├── package.json
 │   ├── .env.example
 │   ├── next.config.ts
@@ -495,7 +495,7 @@ frontend/
 ├── tsconfig.json                # 경로 별칭 @/* → 프로젝트 루트
 ├── vitest.config.ts             # jsdom + @vitejs/plugin-react + @/* alias 재선언
 ├── vitest.setup.ts              # @testing-library/jest-dom 매처 등록
-├── middleware.ts                # ★ 인증 가드 + refresh 자동 갱신 (§14)
+├── proxy.ts                # ★ 인증 가드 + refresh 자동 갱신 (§14)
 ├── public/
 ├── app/                         # App Router — 이 디렉토리 구조가 곧 URL
 │   ├── layout.tsx               # 루트 레이아웃: html/body, globals.css import (Provider 없음)
@@ -511,7 +511,7 @@ frontend/
 └── lib/
     ├── actions/auth.ts          # 'use server' — loginAction/logoutAction
     ├── session.ts               # 두 세션 쿠키 read/set/clear + getSessionUser (server-only)
-    ├── session-cookie.ts        # 쿠키 이름·속성·maxAge 헬퍼 — ⛔ 의존성 0 (middleware/Edge 공용, §14)
+    ├── session-cookie.ts        # 쿠키 이름·속성·maxAge 헬퍼 — ⛔ 의존성 0 (proxy·Vitest 공용, §14)
     ├── session-cookie.test.ts   # __Host- 프리픽스·maxAge 계산의 회귀 테스트
     ├── fastapi-error.ts         # FastapiError·kind 분류·사용자 문구 — 순수 모듈 (server-only 아님)
     ├── fastapi-error.test.ts    # 오류 분류·문구의 회귀 테스트
@@ -592,11 +592,12 @@ export function fastapiErrorMessage(error: unknown): string
 - **토큰은 래퍼가 쿠키에서 읽지 않고 호출부가 `token` 으로 넘긴다.** `lib/session.ts` 가 이 모듈을 import 하므로 반대 방향 의존은 순환이 된다. 보호 API 호출은 `getSessionToken()` 결과를 그대로 넘긴다.
 - 호출부는 `error.kind` 로 분기한다(⛔ 상태코드 하드코딩·문구 하드코딩 금지).
 
-`lib/session-cookie.ts` (쿠키 이름·속성 — **의존성 0 인 순수 모듈**, middleware/Edge 와 공유):
+`lib/session-cookie.ts` (쿠키 이름·속성 — **의존성 0 인 순수 모듈**, proxy·Vitest 와 공유):
 
 ```ts
-// ⛔ 이 파일에는 어떤 import 도 추가하지 마라 — middleware(Edge)가 상수 하나를 쓰려고
-//    lib/session.ts 를 import 하면 server-only·next/headers 가 Edge 번들에 끌려온다.
+// ⛔ 이 파일에는 어떤 import 도 추가하지 마라 — proxy.ts 와 Vitest 도 이 파일을 쓴다.
+//    lib/session.ts(server-only·next/headers)를 끌어오면 proxy 는 렌더 전용 API 에 묶이고
+//    Vitest 에서는 로드조차 되지 않는다.
 
 /** production 은 `__Host-` 프리픽스 — 브라우저가 secure+path=/+Domain 미지정을 강제해
  *  서브도메인의 쿠키 주입(세션 고정)을 차단한다. dev(localhost, http)는 프리픽스 없음. */
@@ -604,7 +605,7 @@ export const SESSION_COOKIE = withHostPrefix("__PROJECT_SNAKE___session", IS_PRO
 export const REFRESH_COOKIE = withHostPrefix("__PROJECT_SNAKE___refresh", IS_PRODUCTION)  // refresh
 
 /** access 쿠키 maxAge = expires_in − 60초(하한 60초) — 쿠키가 토큰보다 먼저 죽어야
- *  middleware 가 만료를 "쿠키 없음 → refresh" 로 선제 감지한다. */
+ *  proxy 가 만료를 "쿠키 없음 → refresh" 로 선제 감지한다. */
 export function accessCookieMaxAge(expiresInSeconds: number): number
 
 /** 두 쿠키의 공통 속성 — httpOnly·sameSite:"lax"·path:"/"·production 만 secure.
@@ -764,7 +765,7 @@ export default function LandingPage() {
 
 ### 보안 응답 헤더 (`next.config.ts`)
 
-전 경로 공통 보안 헤더를 `next.config.ts` 의 `headers()` 에서 내보낸다. CSP 는 Next 런타임 요구를 감안한 **현실적 기본값**이다 — Next 가 하이드레이션 데이터를 인라인 `<script>` 로 심으므로 `script-src 'unsafe-inline'` 을 허용하고(nonce 로 조이려면 요청별 middleware CSP 생성으로 전환해야 한다), `'unsafe-eval'` 은 **dev 전용**(HMR)이다. 브라우저는 FastAPI 를 직접 부르지 않는 구조라 `connect-src 'self'` 로 충분하다.
+전 경로 공통 보안 헤더를 `next.config.ts` 의 `headers()` 에서 내보낸다. CSP 는 Next 런타임 요구를 감안한 **현실적 기본값**이다 — Next 가 하이드레이션 데이터를 인라인 `<script>` 로 심으므로 `script-src 'unsafe-inline'` 을 허용하고(nonce 로 조이려면 요청별 proxy CSP 생성으로 전환해야 한다), `'unsafe-eval'` 은 **dev 전용**(HMR)이다. 브라우저는 FastAPI 를 직접 부르지 않는 구조라 `connect-src 'self'` 로 충분하다.
 
 | 헤더 | 값 | 이유 |
 |------|-----|------|
@@ -786,9 +787,9 @@ export default function LandingPage() {
 3. **`lib/session-cookie.test.ts`** — `__Host-` 프리픽스 적용 조건과 access 쿠키 maxAge 계산(`expires_in − 60초`, 하한 60초), 두 쿠키 공통 속성. (§14 세션 쿠키 속성)
 4. **`lib/fastapi-error.test.ts`** — 상태코드→`kind` 분류(429 는 `throttled`)와 원인별 사용자 문구. `lib/server/fastapi.ts` 는 `server-only` 라 러너가 로드하지 못하므로 순수 로직을 `lib/fastapi-error.ts` 로 분리해 고정한다.
 
-> **1·2번은 짝이다.** middleware 가 `next` 에 담는 값은 pathname+search 이고, 폼은 그 값을 hidden 필드로 실어 보내며, `safeRedirect()` 가 그것을 그대로 되살린다. 한쪽만 검증하면 **복귀할 때 query 를 버리는데도 테스트는 통과한다.**
+> **1·2번은 짝이다.** proxy 가 `next` 에 담는 값은 pathname+search 이고, 폼은 그 값을 hidden 필드로 실어 보내며, `safeRedirect()` 가 그것을 그대로 되살린다. 한쪽만 검증하면 **복귀할 때 query 를 버리는데도 테스트는 통과한다.**
 
-⛔ **서버 컴포넌트·Server Action·`middleware.ts` 는 여기서 테스트하지 않는다.** jsdom 에는 RSC 런타임도 요청 컨텍스트(`cookies()`/`redirect()`)도 없다. 흉내 낸 목으로 통과시키면 "테스트는 초록인데 실제로는 깨지는" 가짜 안전망이 된다 — 검증 로직은 `lib/` 의 순수 함수로 뽑아 그것을 테스트하고, 통합 확인은 `pnpm build` + 수동 동작 확인으로 대신한다.
+⛔ **서버 컴포넌트·Server Action·`proxy.ts` 는 여기서 테스트하지 않는다.** jsdom 에는 RSC 런타임도 요청 컨텍스트(`cookies()`/`redirect()`)도 없다. 흉내 낸 목으로 통과시키면 "테스트는 초록인데 실제로는 깨지는" 가짜 안전망이 된다 — 검증 로직은 `lib/` 의 순수 함수로 뽑아 그것을 테스트하고, 통합 확인은 `pnpm build` + 수동 동작 확인으로 대신한다.
 
 ---
 
@@ -797,23 +798,23 @@ export default function LandingPage() {
 전체 흐름 — **브라우저는 쿠키만 들고 다니고, 토큰은 서버 밖으로 나가지 않는다.**
 
 ```
-브라우저 ──(httpOnly 쿠키 2개: access + refresh)──▶ Next(middleware / 서버 컴포넌트 / Server Action) ──(Bearer access JWT)──▶ FastAPI
+브라우저 ──(httpOnly 쿠키 2개: access + refresh)──▶ Next(proxy / 서버 컴포넌트 / Server Action) ──(Bearer access JWT)──▶ FastAPI
 ```
 
-- **인증 가드는 `middleware.ts`**: matcher 가 제외하지 않은 모든 요청에서,
+- **인증 가드는 `proxy.ts`**(Next 16 에서 `middleware` 파일 규약이 `proxy` 로 이름이 바뀌었다 — export 함수도 `proxy`, **Node.js 런타임** 고정이며 `runtime` 설정은 허용되지 않는다): matcher 가 제외하지 않은 모든 요청에서,
   1. **access 쿠키가 있으면 존재만 보고 통과한다** — 서명 검증도, 만료 확인도 하지 않는다(요청마다 도는 코드이고, `SECRET_KEY` 는 백엔드 것이다).
   2. **access 쿠키가 없고 refresh 쿠키만 있으면** 백엔드 `POST /api/v1/auth/refresh` 를 직접 호출한다(**자동 세션 갱신**, 타임아웃 5초). 성공하면 회전된 새 쌍으로 두 쿠키를 갈아끼우고 원래 요청을 그대로 통과시킨다 — 사용자는 재로그인 없이 세션이 이어진다. **401 이면** 회복 불가능한 refresh 이므로 두 쿠키를 파기하고 `/login?next=` 로 보낸다. **네트워크 오류·5xx 는** 토큰 판정이 아니라 백엔드 문제다 — 쿠키는 보존하고 리다이렉트만 한다(복구 후 다시 오면 여기서 갱신된다).
   3. 둘 다 없으면 `/login?next=<원래경로>` 로 리다이렉트한다. `next` 에는 **pathname + search** 를 담는다(복귀 시 query 를 잃지 않게 §13 테스트).
-- **access 쿠키 maxAge 는 `expires_in − 60초`** (`accessCookieMaxAge`) — 쿠키가 토큰보다 먼저 죽어야 middleware 가 만료를 "쿠키 없음 → refresh" 로 **선제** 감지한다. refresh 는 access 만료 주기(기본 15분)에 한 번꼴이라 "요청마다 백엔드에 묻는" 비용 문제가 없다.
+- **access 쿠키 maxAge 는 `expires_in − 60초`** (`accessCookieMaxAge`) — 쿠키가 토큰보다 먼저 죽어야 proxy 가 만료를 "쿠키 없음 → refresh" 로 **선제** 감지한다. refresh 는 access 만료 주기(기본 15분)에 한 번꼴이라 "요청마다 백엔드에 묻는" 비용 문제가 없다.
 - **로그인은 Server Action**: 폼 제출 → `POST /api/v1/auth/login`(JSON `{username, password}`) → 응답의 access·refresh 를 **httpOnly 쿠키 2개로 설정**(`setSessionTokens`) → `redirect(safeRedirect(next))` 로 원래 위치(없으면 `/`) 복귀. 429(시도 제한)는 자격증명 오류와 구분된 문구로 보여준다.
 - **사용자 정보는 이동한 화면의 서버 컴포넌트가 `getSessionUser("<현재경로>")`(→ `GET /api/v1/auth/me`)로 직접 읽는다.** 서버 컴포넌트는 자기 URL 을 모르므로 복귀 경로를 인자로 넘긴다. 로그인 액션에서 미리 불러 클라이언트로 넘기지 않는다 — 중복 요청이 되고, 실패 시 리다이렉트까지 건너뛰어진다.
 - **로그아웃도 Server Action**: 백엔드 `POST /auth/logout` 으로 refresh 토큰을 **폐기(revoke)** 한 뒤 두 쿠키를 지우고 `/login` 으로 리다이렉트한다. 백엔드 호출은 **best-effort** 다 — 로그아웃의 본체는 쿠키 삭제이고, `/auth/logout` 은 멱등(204·인증 불요)이라 실패·재시도 모두 안전하다. 폐기된 세션의 access 토큰은 sid 검사로 **즉시 401** 이 된다(§9).
-- **401 처리**: middleware 는 만료를 모르므로 **통과했는데 FastAPI 가 401 을 주는 구간이 반드시 생긴다**(자동 refresh 가 대부분 걸러 주지만 `SECRET_KEY` 교체·계정 비활성화·세션 폐기는 남는다). 그때 `getSessionUser()` 가 `FastapiError.kind === "unauthorized"` 를 보고 `/login?next=<현재경로>` 로 보낸다 — 만료 세션 처리는 이 함수 한 곳이 담당한다. 그 밖의 실패(백엔드 미기동·5xx)는 세션 문제가 아니므로 리다이렉트하지 않고 `null` 을 돌려준다 — 화면이 "로그인 만료"와 "백엔드 다운"을 구분해 보여줄 수 있어야 한다.
+- **401 처리**: proxy 는 만료를 모르므로 **통과했는데 FastAPI 가 401 을 주는 구간이 반드시 생긴다**(자동 refresh 가 대부분 걸러 주지만 `SECRET_KEY` 교체·계정 비활성화·세션 폐기는 남는다). 그때 `getSessionUser()` 가 `FastapiError.kind === "unauthorized"` 를 보고 `/login?next=<현재경로>` 로 보낸다 — 만료 세션 처리는 이 함수 한 곳이 담당한다. 그 밖의 실패(백엔드 미기동·5xx)는 세션 문제가 아니므로 리다이렉트하지 않고 `null` 을 돌려준다 — 화면이 "로그인 만료"와 "백엔드 다운"을 구분해 보여줄 수 있어야 한다.
 - **SSO 도입 시 확장**: 로그인 페이지에서 백엔드 authorize URL 로 보내고, 콜백을 받을 라우트(`app/auth/callback/`)에서 토큰을 **쿠키로 옮긴 뒤** 리다이렉트한다. 토큰을 클라이언트 코드가 만지지 않는 원칙은 그대로다(§9).
 
 ### 세션 쿠키 속성 (MUST)
 
-쿠키는 **두 개**이고, 이름·속성은 `lib/session-cookie.ts` **한 곳**에서만 만든다 — `lib/session.ts`(Server Action)와 `middleware.ts`(Edge)가 다른 속성으로 구우면 같은 이름·다른 속성의 쿠키가 공존해 "로그아웃했는데 세션이 남는" 상태가 된다.
+쿠키는 **두 개**이고, 이름·속성은 `lib/session-cookie.ts` **한 곳**에서만 만든다 — `lib/session.ts`(Server Action)와 `proxy.ts`(요청 단계)가 다른 속성으로 구우면 같은 이름·다른 속성의 쿠키가 공존해 "로그아웃했는데 세션이 남는" 상태가 된다.
 
 | 속성 | 값 | 이유 |
 |------|-----|------|
@@ -822,7 +823,7 @@ export default function LandingPage() {
 | `sameSite` | `lax` | 외부 링크 진입은 허용하면서 크로스사이트 POST 를 막아 CSRF 완화 |
 | `secure` | 운영 `true` (`NODE_ENV === "production"`) | 평문 HTTP 전송 차단 + `__Host-` 프리픽스의 강제 조건. ⚠️ localhost(http)에서 켜면 **쿠키가 저장되지 않아 로그인이 무한 루프**가 된다 — dev 에서는 반드시 `false` |
 | `path` | `/` | 모든 경로에서 세션 인식 (`__Host-` 강제 조건이기도 하다) |
-| 만료 | access: `maxAge` = `expires_in − 60초`(하한 60초), refresh: `maxAge` = `refresh_expires_in` | 백엔드 `TokenResponse` 의 값으로 **자동 동기화**된다 — `ACCESS_TOKEN_EXPIRE_MINUTES` 를 바꿔도 프론트 수정이 필요 없다. access 쿠키가 토큰보다 60초 먼저 죽어야 middleware 가 만료를 선제 감지한다(위 참조) |
+| 만료 | access: `maxAge` = `expires_in − 60초`(하한 60초), refresh: `maxAge` = `refresh_expires_in` | 백엔드 `TokenResponse` 의 값으로 **자동 동기화**된다 — `ACCESS_TOKEN_EXPIRE_MINUTES` 를 바꿔도 프론트 수정이 필요 없다. access 쿠키가 토큰보다 60초 먼저 죽어야 proxy 가 만료를 선제 감지한다(위 참조) |
 | 삭제 | `delete()` 가 아니라 **같은 속성으로 `maxAge: 0` 덮어쓰기** | production 의 `__Host-` 쿠키는 삭제용 Set-Cookie 도 프리픽스 조건(secure·`path=/`)을 채워야 브라우저가 받아들인다 — 속성이 다르면 삭제가 조용히 무시된다 |
 
 ### ⚠️ 오픈 리다이렉트 방지 (MUST)
@@ -858,12 +859,12 @@ export function safeRedirect(value: unknown): string {
 ```
 
 ```ts
-// middleware.ts — 인증 가드 + 자동 세션 갱신 (요약. 전체는 frontend/middleware.ts)
+// proxy.ts — 인증 가드 + 자동 세션 갱신 (요약. 전체는 frontend/proxy.ts)
 import { NextResponse, type NextRequest } from "next/server"
-// ⛔ lib/session 이 아니다 — server-only·next/headers 가 Edge 번들로 끌려온다(Edge 번들 오염 방지).
+// ⛔ lib/session 이 아니다 — 그쪽은 렌더·Server Action 용 API(cookies()·redirect())다. proxy 는 NextRequest/NextResponse 로 다룬다.
 import { REFRESH_COOKIE, SESSION_COOKIE, accessCookieMaxAge, sessionCookieOptions } from "@/lib/session-cookie"
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   // access 쿠키가 있으면 존재만 보고 통과 — 서명·만료 검증은 FastAPI 몫이다.
   if (request.cookies.has(SESSION_COOKIE)) return NextResponse.next()
 
@@ -981,7 +982,7 @@ import "./globals.css"
 | DB 테이블 | `snake_case` 복수형 |
 | 서비스 파일 | `<domain>_service.py` |
 | React 컴포넌트 파일/이름 | `PascalCase`, default export (`components/LoginForm.tsx`) |
-| App Router 라우트 파일 | 프레임워크 규약 **소문자 고정**: `page.tsx`, `layout.tsx`, `route.ts`, `middleware.ts` |
+| App Router 라우트 파일 | 프레임워크 규약 **소문자 고정**: `page.tsx`, `layout.tsx`, `route.ts`, `proxy.ts` |
 | 라우트 디렉토리 | `kebab-case` — URL 경로가 된다 (`app/order-history/page.tsx`) |
 | Server Action 파일 | `lib/actions/<domain>.ts` (`'use server'` 최상단), 함수는 `xxxAction` |
 | 서버 전용 모듈 | `lib/server/<name>.ts` — `import "server-only"` 로 클라이언트 반입 차단 |
@@ -1015,7 +1016,7 @@ import "./globals.css"
 | `FASTAPI_URL` | Next 서버가 호출할 FastAPI 호스트 (예: `http://127.0.0.1:8000`). **서버에서만 읽는다** |
 | `NEXT_PUBLIC_*` | 클라이언트 번들에 노출해도 되는 값만 — 현재 skeleton 은 사용하지 않는다 |
 
-- 프론트 환경변수는 **접두 없이 서버 전용으로 두는 것이 기본**이다. Next 서버 코드(`middleware.ts`, 서버 컴포넌트, Server Action, `lib/server/*`)에서 `process.env` 로 읽는다.
+- 프론트 환경변수는 **접두 없이 서버 전용으로 두는 것이 기본**이다. Next 서버 코드(`proxy.ts`, 서버 컴포넌트, Server Action, `lib/server/*`)에서 `process.env` 로 읽는다.
 - ⚠️ **`NEXT_PUBLIC_` 을 붙인 값은 빌드 시 클라이언트 번들에 그대로 박혀 누구나 볼 수 있다.** `FASTAPI_URL` 처럼 내부 호스트를 가리키는 값이나 비밀값에는 절대 붙이지 않는다. 붙이는 순간 되돌리려면 재빌드·값 교체가 필요하다.
 - 실제 `backend/.env`와 `frontend/.env`는 커밋 금지. 각 디렉터리의 `.env.example`에 **키만** 공유.
 
@@ -1125,7 +1126,7 @@ gh pr merge --squash --delete-branch
 - [ ] Alembic 초기화 + 초기 마이그레이션 (§11) — **DB는 항상 Alembic으로만 관리, `create_all`은 테스트 전용 (MUST §11)**
 - [ ] `pytest` + SQLite in-memory + `conftest.py` 픽스처 (§12)
 - [ ] 프론트 골격(§13): `app/layout.tsx`·`app/page.tsx`, 서버 fetch 래퍼 `lib/server/fastapi.ts`, `lib/session.ts`, `lib/types.ts`
-- [ ] `middleware.ts` 인증 가드 + 로그인/로그아웃 Server Action(`lib/actions/auth.ts`) (§14) — 자체 계정 기본, SSO는 도입 시 콜백 라우트 추가
+- [ ] `proxy.ts` 인증 가드 + 로그인/로그아웃 Server Action(`lib/actions/auth.ts`) (§14) — 자체 계정 기본, SSO는 도입 시 콜백 라우트 추가
 - [ ] `lib/safe-redirect.ts` + **오픈 리다이렉트 거부 테스트**(외부 URL·`//`·스킴) (§14, §13)
 - [ ] 세션 쿠키(access+refresh) 속성 확인 — `httpOnly`/`sameSite=lax`/운영 `secure`+`__Host-` 프리픽스/`path=/`, maxAge 는 `TokenResponse` 의 `expires_in`·`refresh_expires_in` 으로 자동 동기화 (§14)
 - [ ] Tailwind v4 `@theme` — **`@tailwindcss/postcss` + `postcss.config.mjs`**, 진입은 `app/globals.css`, pnpm, ESLint (§15, §2)

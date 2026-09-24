@@ -16,10 +16,10 @@ import type { TokenResponse, User } from "@/lib/types"
 // 대신 FastAPI 호출은 전부 서버(서버 컴포넌트 / Server Action)에서만 일어난다.
 //
 // 쿠키는 두 개다: access(짧은 수명, Bearer 로 주입)와 refresh(긴 수명, 불투명 문자열).
-// access 가 만료되면 middleware 가 refresh 쿠키로 새 쌍을 받아 갈아끼운다 — middleware.ts 참고.
+// access 가 만료되면 proxy 가 refresh 쿠키로 새 쌍을 받아 갈아끼운다 — proxy.ts 참고.
 
-// 쿠키 이름·속성은 middleware(Edge)도 써야 해서 의존성 없는 모듈에 두고 여기서 다시 내보낸다.
-// (이 파일을 middleware 가 import 하면 server-only·next/headers 가 Edge 번들로 끌려온다)
+// 쿠키 이름·속성은 proxy.ts 와 Vitest 도 써야 해서 의존성 없는 모듈에 두고 여기서 다시 내보낸다.
+// (이 파일은 server-only·next/headers 를 물고 있어 proxy 가 import 하지 않는다 — proxy.ts 머리 주석)
 export { REFRESH_COOKIE, SESSION_COOKIE } from "@/lib/session-cookie"
 
 /** 현재 요청의 access 토큰. 없으면 null. */
@@ -40,7 +40,7 @@ export async function getRefreshToken(): Promise<string | null> {
  * 서버 컴포넌트 렌더 중에는 응답 헤더가 이미 확정되어 Next 가 예외를 던진다.
  *
  * access 쿠키 maxAge 는 expires_in 보다 60초 짧다(accessCookieMaxAge) — 쿠키가 토큰보다
- * 먼저 죽어야 middleware 가 만료를 "쿠키 없음" 으로 선제 감지해 refresh 경로를 탄다.
+ * 먼저 죽어야 proxy 가 만료를 "쿠키 없음" 으로 선제 감지해 refresh 경로를 탄다.
  */
 export async function setSessionTokens(tokens: TokenResponse): Promise<void> {
   const store = await cookies()
@@ -91,8 +91,8 @@ export async function hasValidSession(): Promise<boolean> {
 /**
  * 현재 세션 사용자 (`GET /api/v1/auth/me`).
  *
- * ⚠️ middleware 는 **쿠키의 존재**만 본다 — 토큰이 만료됐는지는 알 수 없다.
- *    그래서 middleware 를 통과하고도 FastAPI 가 401 을 주는 구간이 반드시 생긴다
+ * ⚠️ proxy 는 **쿠키의 존재**만 본다 — 토큰이 만료됐는지는 알 수 없다.
+ *    그래서 proxy 를 통과하고도 FastAPI 가 401 을 주는 구간이 반드시 생긴다
  *    (자동 refresh 가 대부분 걸러 주지만, SECRET_KEY 교체·계정 비활성화는 남는다).
  *    만료 세션을 로그인으로 보내는 일은 인터셉터가 아니라 이 함수가 담당한다 —
  *    그 경우 여기서 `/login?next=<현재경로>` 로 보낸다.
