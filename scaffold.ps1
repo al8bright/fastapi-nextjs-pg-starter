@@ -471,9 +471,16 @@ if ((Test-Path $Target) -and (Get-ChildItem -Path $Target -Force -ErrorAction Si
   }
 }
 New-Item -ItemType Directory -Force -Path $Target | Out-Null
-# 닷파일(.gitignore·.python-version·.nvmrc·.github·.claude 등) 포함 전체 복사 —
-# 와일드카드('*')는 hidden 속성 항목을 놓칠 수 있으므로 -Force 열거로 복사한다 (scaffold.sh 의 'cp -R skeleton/.' 과 동일 결과)
-Get-ChildItem -Path $SkeletonDir -Force | Copy-Item -Destination $Target -Recurse -Force
+# 닷파일(.gitignore·.python-version·.nvmrc·.github·.claude 등) 포함 전체 복사.
+# ⛔ Copy-Item 통째 복사는 쓰지 않는다 — 템플릿 저장소에서 개발/검증을 하면 skeleton\ 안에
+#    node_modules(수백 MB)·.venv·.next 같은 gitignore 산출물이 남는데, 그대로 복사되면
+#    생성 프로젝트가 수백 MB 로 부풀고 토큰 치환이 빌드 산출물을 붙잡는다. 실제 .env 가
+#    복사되면 템플릿의 SECRET_KEY 가 새는 보안 문제도 된다 (scaffold.sh 의 tar --exclude 와 동일 결과).
+#    robocopy 는 Windows 기본 탑재이고 /XD·/XF 로 디렉터리·파일을 원천 제외한다.
+$_xd = 'node_modules', '.venv', '.next', '.ruff_cache', '.pytest_cache', '__pycache__'
+robocopy $SkeletonDir $Target /E /XD $_xd /XF '.DS_Store' '.env' /NFL /NDL /NJH /NJS /NP | Out-Null
+# robocopy 종료 코드: 0~7 = 성공(복사 결과 비트마스크), 8 이상 = 실패
+if ($LASTEXITCODE -ge 8) { Write-Warn2 "골격 복사 실패 (robocopy 코드 $LASTEXITCODE) — 중단합니다"; exit 1 }
 if ($useDesign) { Copy-Item $DesignFile (Join-Path $Target 'docs\DESIGN.md') -Force }
 # bootstrap 이 실제로 설치·고정한 런타임 버전을 생성 프로젝트에 반영 (골격의 값은 덮어쓴다)
 if ($_PinDir) {
@@ -489,9 +496,12 @@ Write-Ok "복사 완료"
 # ---------- 3. 토큰 치환 ----------
 Write-Step "토큰 치환"
 $inc = '*.ts','*.tsx','*.py','*.css','*.html','*.json','*.md','*.ini','*.mako','*.js','*.mjs','*.example','*.txt'
-# -Force: 숨김 속성 파일도 치환 대상에 포함 (bash find 와 일치). node_modules/.venv 는 제외 (재실행 성능·안전)
+# -Force: 숨김 속성 파일도 치환 대상에 포함 (bash find 와 일치).
+# 복사 단계가 산출물을 제외하지만, 기존 디렉토리 위에 덮어쓴 재실행(이미 install/build 된
+# 프로젝트)에서는 node_modules·.next 등이 남아 있다 — 여기서도 걸러야 수 MB 빌드 산출물을
+# 문자열 치환이 붙잡지 않는다(방어 이중화, scaffold.sh 의 find -prune 과 동일).
 $files = Get-ChildItem -Path $Target -Recurse -File -Include $inc -Force |
-  Where-Object { $_.FullName -notmatch '[\\/](node_modules|\.venv)[\\/]' }
+  Where-Object { $_.FullName -notmatch '[\\/](node_modules|\.venv|\.next|\.ruff_cache|\.pytest_cache|__pycache__|\.git)[\\/]' }
 foreach ($f in $files) {
   $t = [System.IO.File]::ReadAllText($f.FullName)
   $o = $t

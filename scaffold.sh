@@ -416,7 +416,18 @@ if [ -d "$TARGET" ] && [ -n "$(ls -A "$TARGET" 2>/dev/null)" ]; then
   fi
 fi
 mkdir -p "$TARGET" || { warn "대상 디렉토리 생성 실패: $TARGET"; exit 1; }
-cp -R "$SKELETON_DIR/." "$TARGET/" || { warn "골격 복사 실패 (권한/디스크 확인) — 중단합니다"; exit 1; }
+# ⛔ cp -R 로 통째 복사하지 않는다 — 템플릿 저장소에서 개발/검증을 하면 skeleton/ 안에
+#    node_modules(수백 MB)·.venv·.next 같은 gitignore 산출물이 남는데, 그대로 복사되면
+#    생성 프로젝트가 수백 MB 로 부풀고 아래 토큰 치환이 빌드 산출물을 붙잡고 사실상 멈춘다.
+#    실제 .env 가 복사되면 템플릿의 SECRET_KEY 가 새 프로젝트로 새는 보안 문제도 된다.
+#    tar 는 GNU/bsdtar 모두 --exclude 를 지원하므로 산출물·비밀을 원천 제외하고 복사한다.
+_COPY_EXCLUDES="node_modules .venv .next .ruff_cache .pytest_cache __pycache__ .DS_Store .env"
+_tar_ex=""
+for _e in $_COPY_EXCLUDES; do _tar_ex="$_tar_ex --exclude $_e"; done
+# shellcheck disable=SC2086  # $_tar_ex 는 공백으로 나뉘어야 하는 옵션 나열이다
+if ! (cd "$SKELETON_DIR" && tar cf - $_tar_ex .) | (cd "$TARGET" && tar xf -); then
+  warn "골격 복사 실패 (권한/디스크 확인) — 중단합니다"; exit 1
+fi
 [ $USE_DESIGN -eq 1 ] && cp "$DESIGN_FILE" "$TARGET/docs/DESIGN.md"
 # bootstrap 이 실제로 설치·고정한 런타임 버전을 생성 프로젝트에 반영 (골격의 값은 덮어쓴다)
 if [ -n "$_PIN_DIR" ]; then
@@ -430,22 +441,44 @@ ok "복사 완료"
 
 # ---------- 3. 토큰 치환 ----------
 step "토큰 치환"
-replace_tokens() {
-  local f="$1" content new
-  content=$(cat "$f"; printf x); content=${content%x}
-  # 치환 문자열은 인용 — bash 5.2 patsub_replacement 의 '&' 특수 취급 방지
-  new=${content//__PROJECT_NAME__/"$NAME"}
-  new=${new//__PROJECT_SNAKE__/"$SNAKE"}
-  new=${new//__THEME_CSS__/"$THEME"}
-  # 변경된 파일만 재기록 (재실행 시 불필요한 mtime 변경 방지 — scaffold.ps1 과 동일)
-  if [ "$new" != "$content" ]; then
-    printf '%s' "$new" > "$f" || { warn "치환 기록 실패: $f — 중단합니다"; exit 1; }
-  fi
-}
-while IFS= read -r -d '' f; do replace_tokens "$f"; done < <(
-  find "$TARGET" \( -name node_modules -o -name .venv \) -prune -o -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.py' -o -name '*.css' \
-    -o -name '*.html' -o -name '*.json' -o -name '*.md' -o -name '*.ini' -o -name '*.mako' \
-    -o -name '*.js' -o -name '*.mjs' -o -name '*.example' -o -name '*.txt' \) -print0 )
+# ⛔ bash 의 ${var//…} 로 치환하지 않는다 — macOS 기본 bash 3.2 의 패턴 치환은 문자열 길이에
+#    사실상 제곱으로 느려져(특히 UTF-8 한국어 문서, LC_ALL=C 로도 부족) 75KB 문서 하나에
+#    수십 초가 걸린다. python3 는 이 스크립트의 사전 요구이므로 단일 프로세스로 처리한다.
+#    바이트 치환(토큰은 ASCII)이라 인코딩·줄바꿈이 원본 그대로 보존된다.
+# 복사 단계가 산출물을 제외하지만, 기존 디렉토리 위에 덮어쓴 재실행(이미 install/build 된
+# 프로젝트)에서는 node_modules·.next 등이 남아 있다 — 여기서도 반드시 걸러야 수 MB 빌드
+# 산출물을 붙잡지 않는다(방어 이중화). 변경된 파일만 재기록한다(재실행 시 불필요한 mtime
+# 변경 방지 — scaffold.ps1 과 동일).
+SCAFFOLD_NAME="$NAME" SCAFFOLD_SNAKE="$SNAKE" SCAFFOLD_THEME="$THEME" \
+SCAFFOLD_TARGET="$TARGET" python3 - <<'PYEOF' || { warn "토큰 치환 실패 — 중단합니다"; exit 1; }
+import os
+
+env = os.environ
+target = env["SCAFFOLD_TARGET"]
+tokens = [
+    (b"__PROJECT_NAME__", env["SCAFFOLD_NAME"].encode()),
+    (b"__PROJECT_SNAKE__", env["SCAFFOLD_SNAKE"].encode()),
+    (b"__THEME_CSS__", env["SCAFFOLD_THEME"].encode()),
+]
+PRUNE = {"node_modules", ".venv", ".next", ".ruff_cache", ".pytest_cache", "__pycache__", ".git"}
+EXTS = {".ts", ".tsx", ".py", ".css", ".html", ".json", ".md", ".ini", ".mako",
+        ".js", ".mjs", ".example", ".txt"}
+
+for root, dirs, files in os.walk(target):
+    dirs[:] = [d for d in dirs if d not in PRUNE]
+    for fn in files:
+        if os.path.splitext(fn)[1] not in EXTS:
+            continue
+        path = os.path.join(root, fn)
+        with open(path, "rb") as fh:
+            content = fh.read()
+        new = content
+        for token, value in tokens:
+            new = new.replace(token, value)
+        if new != content:
+            with open(path, "wb") as fh:
+                fh.write(new)
+PYEOF
 ok "치환 완료"
 
 # ---------- 4. .env ----------
