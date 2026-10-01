@@ -1,4 +1,4 @@
-"""인증 세션·로그인 시도 제한 모델 (architecture.md §8, §9).
+"""인증 세션·로그인 시도 제한 모델 (ARCHITECTURE.md §8, §9).
 
 - AuthSession: refresh 토큰 1개 = 세션 행 1개. 토큰 평문은 저장하지 않고 SHA-256 hex 만 저장한다.
   access JWT 의 sid 클레임이 이 테이블의 id 를 가리키므로, 행을 폐기(revoked_at)하면

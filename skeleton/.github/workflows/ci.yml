@@ -1,6 +1,6 @@
 name: CI
 
-# architecture.md §20: 이 CI 는 push 이후 도는 사후 안전망이다.
+# ARCHITECTURE.md §20: 이 CI 는 push 이후 도는 사후 안전망이다.
 # 게이트는 push 전 로컬 검증(pytest·ruff·vitest·eslint·build)이다. CI 가 실패하면 되돌리거나 즉시 고친다.
 on:
   push:

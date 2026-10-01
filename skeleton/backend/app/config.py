@@ -1,4 +1,4 @@
-"""애플리케이션 설정 (architecture.md §5).
+"""애플리케이션 설정 (ARCHITECTURE.md §5).
 
 설정은 OS 무관하게 .env 로 주입한다. 접근은 항상 get_settings() 로 한다.
 """
@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     login_max_failures: int = 5
     login_lockout_minutes: int = 15
 
-    # 시각대 (architecture.md §10 KST 단일 기준)
+    # 시각대 (ARCHITECTURE.md §10 KST 단일 기준)
     tz: str = "Asia/Seoul"
 
     # 초기 시드 — 기본은 꺼져 있다. 개발 환경에서만 .env 로 켠다(스캐폴드가 무작위 비밀번호와 함께 켜준다).
@@ -85,7 +85,7 @@ def _apply_timezone(tz: str) -> None:
     offset = local_utc_offset_hours()
     if offset != KST_UTC_OFFSET_HOURS:
         logger.warning(
-            "OS 시각대 오프셋이 UTC%+d 입니다 (KST=UTC+%d). architecture.md §10 위반 — "
+            "OS 시각대 오프셋이 UTC%+d 입니다 (KST=UTC+%d). ARCHITECTURE.md §10 위반 — "
             "Windows 는 TZ 환경변수로 변경되지 않으므로 OS 시각대를 '서울'로 설정하세요.",
             offset,
             KST_UTC_OFFSET_HOURS,

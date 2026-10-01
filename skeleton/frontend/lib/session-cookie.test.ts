@@ -7,7 +7,7 @@ import {
   withHostPrefix,
 } from "./session-cookie"
 
-// 쿠키 이름·수명 규칙 회귀 테스트 (architecture.md §14 세션 쿠키 속성).
+// 쿠키 이름·수명 규칙 회귀 테스트 (ARCHITECTURE.md §14 세션 쿠키 속성).
 // 여기가 깨지면 production 에서 쿠키가 브라우저에게 조용히 버려지거나(__Host- 조건 위반),
 // proxy 의 만료 선제 감지(refresh 경로)가 무너진다.
 describe("withHostPrefix", () => {

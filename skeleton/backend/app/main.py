@@ -1,4 +1,4 @@
-"""FastAPI 진입점 (architecture.md §4).
+"""FastAPI 진입점 (ARCHITECTURE.md §4).
 
 - /api/v1 버전 prefix
 - CORS 미들웨어

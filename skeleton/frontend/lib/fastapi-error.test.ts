@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { FastapiError, fastapiErrorMessage, kindFor } from "./fastapi-error"
 
-// 실패 분류·문구 회귀 테스트 (architecture.md §13).
+// 실패 분류·문구 회귀 테스트 (ARCHITECTURE.md §13).
 // 여기가 깨지면 429(시도 제한)·네트워크 오류·500 이 전부 "아이디 또는 비밀번호" 로 오진된다.
 describe("kindFor", () => {
   it("상태코드를 원인으로 분류한다", () => {

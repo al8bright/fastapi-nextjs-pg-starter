@@ -1,4 +1,4 @@
-"""보안 및 시각(now) 유틸 (architecture.md §9, §10).
+"""보안 및 시각(now) 유틸 (ARCHITECTURE.md §9, §10).
 
 날짜·시간 규칙(§10):
 - 업무 시각은 KST 기준이며, UTC<->KST 변환 레이어를 두지 않는다.

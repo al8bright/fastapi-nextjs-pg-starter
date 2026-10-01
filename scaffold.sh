@@ -44,7 +44,7 @@ done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKELETON_DIR="$SCRIPT_DIR/skeleton"
-DESIGN_FILE="$SCRIPT_DIR/DESIGN.md"
+DESIGN_FILE="$SKELETON_DIR/DESIGN.md"
 
 c_cyan='\033[36m'; c_green='\033[32m'; c_yellow='\033[33m'; c_reset='\033[0m'
 step() { printf "\n${c_cyan}=== %s ===${c_reset}\n" "$1"; }
@@ -432,7 +432,6 @@ for _e in $_COPY_EXCLUDES; do _tar_ex="$_tar_ex --exclude $_e"; done
 if ! (cd "$SKELETON_DIR" && tar cf - $_tar_ex .) | (cd "$TARGET" && tar xf -); then
   warn "골격 복사 실패 (권한/디스크 확인) — 중단합니다"; exit 1
 fi
-[ $USE_DESIGN -eq 1 ] && cp "$DESIGN_FILE" "$TARGET/docs/DESIGN.md"
 # bootstrap 이 실제로 설치·고정한 런타임 버전을 생성 프로젝트에 반영 (골격의 값은 덮어쓴다)
 if [ -n "$_PIN_DIR" ]; then
   for _pin in .python-version .nvmrc; do
@@ -486,7 +485,7 @@ PYEOF
 ok "치환 완료"
 
 # ---------- 4. .env ----------
-step ".env 생성 (OS 무관 주입 — architecture.md §5)"
+step ".env 생성 (OS 무관 주입 — ARCHITECTURE.md §5)"
 # ⛔ 기존 .env 를 덮어쓰면 SECRET_KEY 가 재발급되어 발급된 JWT 가 전부 무효가 되고,
 #    손으로 채운 DB 비밀번호도 사라진다. 백업을 남긴 뒤 새로 쓴다.
 if [ -f "$TARGET/backend/.env" ]; then
@@ -497,7 +496,7 @@ cat > "$TARGET/backend/.env" <<EOF || { warn "backend/.env 생성 실패 — 중
 DATABASE_URL=$DATABASE_URL
 SECRET_KEY=$SECRET
 ACCESS_TOKEN_EXPIRE_MINUTES=15
-# 인증 세션·로그인 스로틀 (architecture.md §9) — 코드 기본값과 같지만, 운영자가 .env 만 보고도
+# 인증 세션·로그인 스로틀 (ARCHITECTURE.md §9) — 코드 기본값과 같지만, 운영자가 .env 만 보고도
 # 조절 지점을 알 수 있도록 명시한다.
 REFRESH_TOKEN_EXPIRE_DAYS=14
 LOGIN_MAX_FAILURES=5
@@ -623,7 +622,7 @@ cat <<EOF
 [확인]    브라우저: http://localhost:3000
           → '백엔드 API'와 '데이터베이스'가 모두 '정상'이면 성공입니다.
 
-[DB 변경] 모델 수정 시 (architecture.md §11):
+[DB 변경] 모델 수정 시 (ARCHITECTURE.md §11):
   cd "$BACKEND"
   .venv/bin/python -m alembic revision --autogenerate -m "변경요약"
   .venv/bin/python -m alembic upgrade head

@@ -3,7 +3,7 @@
 > TDD 순서대로 진행한다. **한 번에 실패하는 테스트 하나**(Red) → 최소 구현(Green) → 정리(Refactor).
 > 구조 변경(Structural)과 동작 변경(Behavioral)을 분리한다.
 
-## 0. 부트스트랩 (architecture.md §21 체크리스트)
+## 0. 부트스트랩 (ARCHITECTURE.md §21 체크리스트)
 
 - [ ] 저장소 구조 생성 (`backend/`, `frontend/`, `docs/`, 각 하위 `.env.example`, `.gitignore`)
 - [ ] 백엔드 `app/` 골격: `main.py`, `config.py`, `dependencies.py`, `db/`, `core/security.py`

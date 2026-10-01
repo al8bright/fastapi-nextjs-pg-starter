@@ -4,7 +4,7 @@ import "./globals.css"
 
 // 루트 레이아웃 (App Router 필수). 문서 뼈대(html/body)는 여기서만 만든다.
 // Provider 가 하나도 없다 — 서버 상태 캐시(React Query)도, 전역 스토어(Zustand)도
-// 쓰지 않기 때문이다. 세션의 단일 출처는 httpOnly 쿠키다 (architecture.md §14).
+// 쓰지 않기 때문이다. 세션의 단일 출처는 httpOnly 쿠키다 (ARCHITECTURE.md §14).
 
 export const metadata: Metadata = {
   title: "__PROJECT_NAME__",

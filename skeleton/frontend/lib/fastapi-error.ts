@@ -1,7 +1,7 @@
 // FastAPI 실패 분류와 사용자 문구 — 순수 로직이라 **의존성이 없어야 한다**.
 //
 // lib/server/fastapi.ts 에서 분리한 이유: 그 모듈은 `server-only` 를 물고 있어
-// vitest(jsdom)가 **로드조차 못 한다** (architecture.md §13 프론트엔드 테스트).
+// vitest(jsdom)가 **로드조차 못 한다** (ARCHITECTURE.md §13 프론트엔드 테스트).
 // 오류 분기는 네트워크도 요청 컨텍스트도 필요 없는 순수 함수이므로 여기로 뽑아
 // lib/fastapi-error.test.ts 로 고정한다. 호출부는 기존대로 lib/server/fastapi.ts 가
 // re-export 하는 이름을 쓰면 된다 — import 경로를 바꿀 필요가 없다.

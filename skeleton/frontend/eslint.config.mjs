@@ -2,7 +2,7 @@ import js from "@eslint/js"
 import nextCoreWebVitals from "eslint-config-next/core-web-vitals"
 import nextTypescript from "eslint-config-next/typescript"
 
-// ESLint flat config (architecture.md §13).
+// ESLint flat config (ARCHITECTURE.md §13).
 // eslint-config-next 16 은 flat config 배열을 그대로 export 한다 —
 // `@eslint/eslintrc` 의 FlatCompat 로 감쌀 필요가 없다(Next 15 시절 템플릿과 다르다).
 //

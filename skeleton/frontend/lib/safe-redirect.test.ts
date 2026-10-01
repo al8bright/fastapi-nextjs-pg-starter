@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { DEFAULT_REDIRECT, safeRedirect } from "./safe-redirect"
 
-// 오픈 리다이렉트 방지 회귀 테스트 (architecture.md §14).
+// 오픈 리다이렉트 방지 회귀 테스트 (ARCHITECTURE.md §14).
 // `?next=` 는 사용자가 만든 링크로 들어온다 — 여기서 새면 로그인 직후 외부 사이트로 튕긴다.
 describe("safeRedirect", () => {
   it("내부 경로는 그대로 통과시킨다", () => {

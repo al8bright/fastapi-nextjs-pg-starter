@@ -1,4 +1,4 @@
-"""헬스 체크 라우터 (architecture.md §4) — 얇은 HTTP 계층."""
+"""헬스 체크 라우터 (ARCHITECTURE.md §4) — 얇은 HTTP 계층."""
 import logging
 
 from fastapi import APIRouter, Depends, status

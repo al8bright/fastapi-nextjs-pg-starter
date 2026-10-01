@@ -1,7 +1,7 @@
 ﻿#requires -Version 5.1
 <#
 .SYNOPSIS
-  fastapi-nextjs-pg-starter 신규 프로젝트 스캐폴드 (architecture.md 준수).
+  fastapi-nextjs-pg-starter 신규 프로젝트 스캐폴드 (ARCHITECTURE.md 준수).
 
 .DESCRIPTION
   skeleton/ 골격을 복사하고 토큰을 치환한 뒤,
@@ -35,7 +35,7 @@ $ErrorActionPreference = "Stop"
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
 $TemplateDir = $PSScriptRoot
 $SkeletonDir = Join-Path $TemplateDir "skeleton"
-$DesignFile  = Join-Path $TemplateDir "DESIGN.md"
+$DesignFile  = Join-Path $SkeletonDir "DESIGN.md"
 $Enc = [System.Text.UTF8Encoding]::new($false)
 
 function Write-Step($m) { Write-Host "`n=== $m ===" -ForegroundColor Cyan }
@@ -481,7 +481,6 @@ $_xd = 'node_modules', '.venv', '.next', '.ruff_cache', '.pytest_cache', '__pyca
 robocopy $SkeletonDir $Target /E /XD $_xd /XF '.DS_Store' '.env' /NFL /NDL /NJH /NJS /NP | Out-Null
 # robocopy 종료 코드: 0~7 = 성공(복사 결과 비트마스크), 8 이상 = 실패
 if ($LASTEXITCODE -ge 8) { Write-Warn2 "골격 복사 실패 (robocopy 코드 $LASTEXITCODE) — 중단합니다"; exit 1 }
-if ($useDesign) { Copy-Item $DesignFile (Join-Path $Target 'docs\DESIGN.md') -Force }
 # bootstrap 이 실제로 설치·고정한 런타임 버전을 생성 프로젝트에 반영 (골격의 값은 덮어쓴다)
 if ($_PinDir) {
   foreach ($pin in '.python-version', '.nvmrc') {
@@ -511,12 +510,12 @@ foreach ($f in $files) {
 Write-Ok "치환 완료"
 
 # ---------- 4. .env 생성 ----------
-Write-Step ".env 생성 (OS 무관 주입 — architecture.md §5)"
+Write-Step ".env 생성 (OS 무관 주입 — ARCHITECTURE.md §5)"
 $backendEnv = @"
 DATABASE_URL=$databaseUrl
 SECRET_KEY=$secret
 ACCESS_TOKEN_EXPIRE_MINUTES=15
-# 인증 세션·로그인 스로틀 (architecture.md §9) — 코드 기본값과 같지만, 운영자가 .env 만 보고도
+# 인증 세션·로그인 스로틀 (ARCHITECTURE.md §9) — 코드 기본값과 같지만, 운영자가 .env 만 보고도
 # 조절 지점을 알 수 있도록 명시한다.
 REFRESH_TOKEN_EXPIRE_DAYS=14
 LOGIN_MAX_FAILURES=5
@@ -710,7 +709,7 @@ Write-Host @"
 [확인]    브라우저: http://localhost:3000
           → '백엔드 API'와 '데이터베이스'가 모두 '정상'이면 성공입니다.
 
-[DB 변경] 모델 수정 시 (architecture.md §11):
+[DB 변경] 모델 수정 시 (ARCHITECTURE.md §11):
   cd "$backend"
   .\.venv\Scripts\python -m alembic revision --autogenerate -m "변경요약"
   .\.venv\Scripts\python -m alembic upgrade head

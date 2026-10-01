@@ -6,7 +6,7 @@ import type { DbHealth, Health } from "@/lib/types"
 
 // 랜딩(시스템 상태) 화면.
 // 상태 조회는 클라이언트 훅 폴링이 아니라 **서버가 직접** 호출한다.
-// 브라우저는 FastAPI 주소를 알지도 못한다 (architecture.md §13).
+// 브라우저는 FastAPI 주소를 알지도 못한다 (ARCHITECTURE.md §13).
 //
 // 로딩 표시는 <Suspense> 로 만든다 — 서버가 두 요청을 기다리는 동안 껍데기부터 스트리밍되고,
 // 응답이 도착하면 배지만 교체된다. 클라이언트 로딩 상태 없이 서버 렌더만으로 같은 UX 를 낸다.
@@ -114,7 +114,7 @@ export default async function LandingPage() {
         </div>
 
         <footer className="mt-8 text-center text-sm text-on-surface-variant">
-          다음 단계: <code className="font-mono">plan.md</code> 순서대로 TDD 로 개발을 시작하세요.
+          다음 단계: <code className="font-mono">PLAN.md</code> 순서대로 TDD 로 개발을 시작하세요.
           <Link href="/" className="mt-3 block text-on-surface-variant hover:text-on-surface">
             ← 메인으로
           </Link>

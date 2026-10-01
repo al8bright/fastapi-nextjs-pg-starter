@@ -1,4 +1,4 @@
-"""모든 모델을 re-export 하여 메타데이터에 등록한다 (architecture.md §8).
+"""모든 모델을 re-export 하여 메타데이터에 등록한다 (ARCHITECTURE.md §8).
 
 Alembic env.py 와 lifespan 에서 `import app.models` 만으로 전체 모델이 로드되도록 한다.
 """

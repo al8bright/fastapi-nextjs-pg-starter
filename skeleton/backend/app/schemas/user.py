@@ -1,4 +1,4 @@
-"""사용자/인증 스키마 (architecture.md §8) — Pydantic v2."""
+"""사용자/인증 스키마 (ARCHITECTURE.md §8) — Pydantic v2."""
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # 상한의 SSOT 는 해시 생성 지점(core.security)이다. 여기서는 같은 불변식을 HTTP 입력에 미리 적용해

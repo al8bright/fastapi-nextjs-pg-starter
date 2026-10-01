@@ -47,7 +47,7 @@ export function accessCookieMaxAge(expiresInSeconds: number): number {
 }
 
 /**
- * 두 세션 쿠키의 공통 속성 (architecture.md §14 세션 쿠키 속성).
+ * 두 세션 쿠키의 공통 속성 (ARCHITECTURE.md §14 세션 쿠키 속성).
  *
  * lib/session.ts(Server Action)와 proxy.ts(요청 단계)가 **같은 속성**으로 굽지 않으면
  * 같은 이름·다른 속성의 쿠키가 공존해 "로그아웃했는데 세션이 남는" 상태가 된다 —

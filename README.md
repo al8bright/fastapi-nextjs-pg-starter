@@ -7,18 +7,20 @@
 fastapi-nextjs-pg-starter/
 ├── scaffold.ps1            # ★ Windows (PowerShell) 스캐폴드
 ├── scaffold.sh             # ★ macOS / Linux (bash) 스캐폴드 — 동작 동일
-├── DESIGN.md               # 디자인 토큰(색상/타이포) — 선택적으로 테마에 반영
 ├── LICENSE                 # MIT
 ├── .github/workflows/      # 이 템플릿 저장소 자체의 CI
 ├── README.md               # (이 파일)
 └── skeleton/               # 새 프로젝트가 받는 골격 전체
-    ├── CLAUDE.md           # 프로젝트 AI 개발 지침 (선택)
+    ├── README.md           # 사람용 개요·실행 방법
+    ├── AGENTS.md           # AI 에이전트 공통 지침 (Codex·Cursor 등 공용)
+    ├── CLAUDE.md           # Claude Code 진입점 — @AGENTS.md import
+    ├── ARCHITECTURE.md     # 공통 아키텍처 가이드 (상세 기준)
+    ├── DESIGN.md           # 디자인 토큰(색상/타이포) — 항상 포함, 테마 주입은 선택
     ├── PLAN.md             # TDD 작업 계획
-    ├── README.md
+    ├── docs/               # 프로젝트 고유 문서 (PRD·유저 플로우·기획서 등)
     ├── .python-version / .nvmrc      # 런타임 핀
     ├── .gitignore / .gitattributes
     ├── .github/workflows/ci.yml      # 생성된 프로젝트의 CI
-    ├── docs/architecture.md          # 공통 아키텍처 가이드 (상세 기준)
     ├── scripts/            # bootstrap.sh / bootstrap.ps1 / versions.env
     ├── backend/            # FastAPI + SQLAlchemy + Alembic + pytest
     └── frontend/           # Next.js App Router + React + TS + Tailwind v4 + 서버 컴포넌트/Server Actions
@@ -168,12 +170,12 @@ flowchart LR
 
 > 계층 규칙: 라우터는 HTTP 만 얇게, 도메인 로직은 `services/`, 검증은 `schemas/`.
 > 프론트의 조회는 서버 컴포넌트, 변경은 Server Actions가 담당하고 FastAPI 통신은 서버 전용 fetch 래퍼로 모은다.
-> 상세는 [`skeleton/docs/architecture.md`](skeleton/docs/architecture.md).
+> 상세는 [`skeleton/ARCHITECTURE.md`](skeleton/ARCHITECTURE.md).
 
 ## 사용법 — OS별 스크립트
 
 > 저장소를 clone 하거나 fork 한 뒤 템플릿 루트에서 자신의 OS 에 맞는 스크립트를 실행한다.
-> 두 스크립트는 같은 `skeleton/`·`DESIGN.md` 를 사용하므로 어느 OS에서 만들어도 결과가 동일하다.
+> 두 스크립트는 같은 `skeleton/` 을 사용하므로 어느 OS에서 만들어도 결과가 동일하다.
 
 > **생성 위치(`-Target`/`--target`)를 지정하지 않으면** 이 템플릿 폴더의 **부모 폴더에 프로젝트명으로** 생성된다.
 > 예: `work/fastapi-nextjs-pg-starter/` 에서 `MyProject` 를 입력하면 → `work/MyProject/` 에 생성.
@@ -220,7 +222,7 @@ chmod +x scaffold.sh          # 최초 1회 (실행 권한이 없을 때)
 1. **런타임 사전 검사** → 하한 미달이면 bootstrap 실행 후 재검증, 실패하면 골격 복사 전에 중단
 2. 이름/위치 입력 → `PascalCase` 를 `snake_case`(DB명·쿠키 이름 접두)로 변환
 3. **DESIGN.md 적용 여부 질문** → 적용 시 `colors`/`typography` 를 Tailwind `@theme` 로 변환해
-   `frontend/app/globals.css` 에 주입(+`docs/DESIGN.md` 복사)
+   `frontend/app/globals.css` 에 주입(`DESIGN.md` 는 적용 여부와 무관하게 항상 포함)
 4. `skeleton/` 복사 + 토큰 치환(`__PROJECT_NAME__`, `__PROJECT_SNAKE__`, 테마) + 런타임 핀 파일 이관
 5. **PostgreSQL 접속정보 질문** → `backend/.env`·`frontend/.env` 생성(`DATABASE_URL`·`SECRET_KEY`·`FASTAPI_URL` 주입)
 6. 백엔드: `python -m venv .venv` + `pip install -r requirements.txt`
@@ -248,18 +250,18 @@ chmod +x scaffold.sh          # 최초 1회 (실행 권한이 없을 때)
 
 1. 스크립트가 출력한 대로 백엔드(`uvicorn`)·프론트(`pnpm dev`)를 실행
 2. 브라우저 <http://localhost:3000> → 랜딩 페이지에서 **백엔드·DB 연결 상태**가 "정상"이면 성공
-3. 생성 프로젝트의 [`README.md`](skeleton/README.md)·[`docs/architecture.md`](skeleton/docs/architecture.md)·
+3. 생성 프로젝트의 [`README.md`](skeleton/README.md)·[`ARCHITECTURE.md`](skeleton/ARCHITECTURE.md)·
    [`PLAN.md`](skeleton/PLAN.md) 를 읽고 TDD(Red→Green→Refactor)로 개발 시작
 
 개발용 기본 관리자는 `admin` 이며, 비밀번호는 스캐폴드가 프로젝트마다 무작위로 생성해 `backend/.env` 의 `DEFAULT_ADMIN_PASSWORD` 에 넣고 완료 안내에 출력한다. 시드는 코드 기본값이 꺼져 있고(`SEED_DEFAULT_ADMIN=false`) 이 `.env` 에서만 켜진다.
 **운영 배포 전에는** `SECRET_KEY` 교체, 기본 관리자 시드 비활성화 또는 비밀번호 변경,
 로그인 화면의 기본 계정 안내 제거가 필요하다.
-세부 항목은 [아키텍처 §21의 배포 전 체크리스트](skeleton/docs/architecture.md#21-신규-프로젝트-부트스트랩-체크리스트)를 확인한다.
+세부 항목은 [아키텍처 §21의 배포 전 체크리스트](skeleton/ARCHITECTURE.md#21-신규-프로젝트-부트스트랩-체크리스트)를 확인한다.
 
 ## 기준이 바뀌면
 
-- **원본만 수정**: `skeleton/docs/architecture.md`(+ 필요 시 `skeleton/CLAUDE.md`).
-- `architecture.md` 상단의 **★ 핵심 MUST 요약**이 항상 최신 고정 규칙을 반영하도록 유지한다.
+- **원본만 수정**: `skeleton/ARCHITECTURE.md`(+ 필요 시 `skeleton/AGENTS.md`).
+- `ARCHITECTURE.md` 상단의 **★ 핵심 MUST 요약**이 항상 최신 고정 규칙을 반영하도록 유지한다.
 - 이미 생성한 프로젝트에는 템플릿 변경이 자동 동기화되지 않는다. 필요한 변경을 선택해 반영한다.
 
 ## 문제 해결
@@ -300,10 +302,10 @@ chmod +x scaffold.sh          # 최초 1회 (실행 권한이 없을 때)
 ## 템플릿 커스터마이즈
 
 - 생성물의 코드·설정·문서 원본은 [`skeleton/`](skeleton/) 에서 수정한다.
-- 공통 디자인 토큰은 [`DESIGN.md`](DESIGN.md), 기본 설계 규칙은
-  [`skeleton/docs/architecture.md`](skeleton/docs/architecture.md), 작업 계획은
+- 공통 디자인 토큰은 [`skeleton/DESIGN.md`](skeleton/DESIGN.md), 기본 설계 규칙은
+  [`skeleton/ARCHITECTURE.md`](skeleton/ARCHITECTURE.md), 작업 계획은
   [`skeleton/PLAN.md`](skeleton/PLAN.md) 에서 관리한다.
-- [`skeleton/CLAUDE.md`](skeleton/CLAUDE.md) 와 `add-backend-domain`·`db-migration`·
+- [`skeleton/AGENTS.md`](skeleton/AGENTS.md)·[`CLAUDE.md`](skeleton/CLAUDE.md) 와 `add-backend-domain`·`db-migration`·
   `add-frontend-feature`·`pr-workflow`·`stack-versions` [스킬](skeleton/.claude/skills/)은
   저장소 안의 규칙을 AI 개발 도구에서 활용하도록 돕는다. 다만 스캐폴드 생성, 애플리케이션 실행,
   테스트와 CI 는 이 파일들 없이도 동작한다.
@@ -323,8 +325,8 @@ chmod +x scaffold.sh          # 최초 1회 (실행 권한이 없을 때)
   `frontend/.env` = `FASTAPI_URL=http://localhost:8000`,
   `backend/.env` 의 `CORS_ORIGINS`·`FRONTEND_URL` = `http://localhost:3000`
 - 테마: `--no-design` 은 기본 12토큰 `@theme`, `--design` 은 DESIGN.md 의 색상
-  (`--color-primary: #00478d` 등 전체 팔레트)이 `frontend/app/globals.css` 에 주입되고
-  `docs/DESIGN.md` 가 복사됨
+  (`--color-primary: #00478d` 등 전체 팔레트)이 `frontend/app/globals.css` 에 주입됨
+  (`DESIGN.md` 는 두 경우 모두 포함)
 - 백엔드: `pip install -r requirements.txt` + `ruff check .` (All checks passed) +
   `pytest -q` (35건 통과). 테스트는 `.env` 의 `DATABASE_URL` 과 무관하게 SQLite 픽스처를 쓴다
 - Alembic: SQLite 기준 `upgrade head` (0001_initial → 0002_users, `app_meta`·`users` 테이블) exit 0
@@ -368,7 +370,7 @@ chmod +x scaffold.sh          # 최초 1회 (실행 권한이 없을 때)
   `alembic upgrade head` 는 확인하지 못했다. 마이그레이션은 SQLite 로만 검증했다.
 - `alembic downgrade base` 는 실행하지 않았다.
 - `scaffold.ps1`(Windows/PowerShell): 실행 환경이 없어 검증하지 못했다. bash 판과 동일한
-  `skeleton/`·`DESIGN.md` 를 사용하지만 결과 동일성은 확인되지 않았다.
+  `skeleton/` 을 사용하지만 결과 동일성은 확인되지 않았다.
 - 스캐폴드의 자동 설치 단계(`--skip-install` 없이 실행)와 `bootstrap.sh` 의 런타임 설치 경로는
   거치지 않았다. 이미 기준을 만족하는 pyenv/fnm 런타임을 재사용했고 pip/pnpm 설치는 수동으로 확인했다.
 - 브라우저 실제 렌더링(디자인 적용·콘솔 에러)은 확인하지 않았다. 검증은 전부 HTTP 레벨(curl)이다.

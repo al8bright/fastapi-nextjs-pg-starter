@@ -1,12 +1,12 @@
 ---
 name: add-backend-domain
-description: __PROJECT_NAME__ 백엔드에 새 도메인/리소스(예: orders, events)를 추가할 때 사용. 모델 → 마이그레이션 → 스키마 → 서비스 → 얇은 라우터 → 테스트 순서를 이 템플릿의 아키텍처(architecture.md §4·§8)에 맞춰 TDD로 안내한다.
+description: __PROJECT_NAME__ 백엔드에 새 도메인/리소스(예: orders, events)를 추가할 때 사용. 모델 → 마이그레이션 → 스키마 → 서비스 → 얇은 라우터 → 테스트 순서를 이 템플릿의 아키텍처(ARCHITECTURE.md §4·§8)에 맞춰 TDD로 안내한다.
 ---
 
 # 백엔드 도메인 추가
 
 새 도메인 `<domain>`(테이블은 `snake_case` **복수형**)을 추가할 때 아래 순서를 따른다.
-상세 근거: `docs/architecture.md` §4(구조)·§8(모델/스키마/서비스). DB 변경은 [db-migration] 스킬 참조.
+상세 근거: `ARCHITECTURE.md` §4(구조)·§8(모델/스키마/서비스). DB 변경은 [db-migration] 스킬 참조.
 
 ## TDD 우선
 먼저 `PLAN.md`에 작업 순서를 적고, **실패하는 API 레벨 테스트 하나**부터 작성한다(Red → Green → Refactor).

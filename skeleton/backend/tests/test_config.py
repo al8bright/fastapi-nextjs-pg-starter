@@ -1,4 +1,4 @@
-"""설정/시각대 테스트 (architecture.md §5, §10)."""
+"""설정/시각대 테스트 (ARCHITECTURE.md §5, §10)."""
 import logging
 import os
 import time

@@ -3,7 +3,7 @@ import LoginForm from "@/components/LoginForm"
 import { safeRedirect } from "@/lib/safe-redirect"
 import { hasValidSession } from "@/lib/session"
 
-// 로그인 화면 (architecture.md §14).
+// 로그인 화면 (ARCHITECTURE.md §14).
 // 서버 컴포넌트(껍데기) + LoginForm(클라이언트) 조합이다. 폼만 클라이언트인 이유는
 // useActionState 로 오류 문구·대기 상태를 다뤄야 하기 때문이다.
 //

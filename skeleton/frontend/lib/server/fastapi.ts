@@ -1,6 +1,6 @@
 import "server-only"
 
-// FastAPI 호출 래퍼 (architecture.md §13). 호출 경로는 항상 이렇다:
+// FastAPI 호출 래퍼 (ARCHITECTURE.md §13). 호출 경로는 항상 이렇다:
 //
 //   브라우저 → Next(서버) → FastAPI
 //

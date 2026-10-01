@@ -2,7 +2,7 @@ import path from "node:path"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vitest/config"
 
-// 테스트 러너 (architecture.md §16).
+// 테스트 러너 (ARCHITECTURE.md §16).
 // ⚠️ Next 는 Vite 를 쓰지 않는다 — 이 설정은 **테스트 전용**이다. `next build` 는 Turbopack 이 한다.
 //    그래서 tsconfig 의 paths 를 Vite 가 자동으로 읽지 않으므로 alias 를 여기 다시 적어야 한다.
 //

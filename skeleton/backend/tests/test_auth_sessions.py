@@ -1,4 +1,4 @@
-"""DB 세션 기반 refresh 토큰·로그인 시도 제한 테스트 (architecture.md §9, §12)."""
+"""DB 세션 기반 refresh 토큰·로그인 시도 제한 테스트 (ARCHITECTURE.md §9, §12)."""
 from datetime import timedelta
 
 import pytest

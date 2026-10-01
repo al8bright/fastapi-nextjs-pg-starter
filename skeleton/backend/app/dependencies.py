@@ -1,4 +1,4 @@
-"""FastAPI 공통 의존성 (architecture.md §6) — 단일 파일."""
+"""FastAPI 공통 의존성 (ARCHITECTURE.md §6) — 단일 파일."""
 from collections.abc import Generator
 
 from fastapi import Depends, HTTPException, status
@@ -26,7 +26,7 @@ def get_token_payload(
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    """Bearer JWT 를 검증하고 페이로드를 반환한다 (architecture.md §9).
+    """Bearer JWT 를 검증하고 페이로드를 반환한다 (ARCHITECTURE.md §9).
 
     sub(사용자)와 sid(세션) 두 클레임이 모두 있어야 한다 — sid 가 없으면 세션 폐기 검사를
     우회하는 토큰이 되므로 구형/변조 토큰은 여기서 거부한다.
@@ -48,7 +48,7 @@ def get_current_user(
     payload: dict = Depends(get_token_payload),
     db: Session = Depends(get_db),
 ) -> User:
-    """JWT sub(=user id)로 현재 사용자를 조회한다 (architecture.md §6, §9).
+    """JWT sub(=user id)로 현재 사용자를 조회한다 (ARCHITECTURE.md §6, §9).
 
     sid 세션이 폐기·만료됐으면 access 토큰이 아직 만료 전이어도 401 이다
     — 로그아웃·강제 폐기의 즉시 무효화가 이 검사에서 실현된다.

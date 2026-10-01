@@ -1,11 +1,11 @@
 ---
 name: db-migration
-description: __PROJECT_NAME__ 의 DB 스키마를 바꿀 때(SQLAlchemy 모델 생성/변경, 테이블 추가/수정) 사용. Alembic revision/upgrade 워크플로와 금지사항(런타임 create_all·수동 ALTER 금지)을 architecture.md §11 기준으로 안내한다.
+description: __PROJECT_NAME__ 의 DB 스키마를 바꿀 때(SQLAlchemy 모델 생성/변경, 테이블 추가/수정) 사용. Alembic revision/upgrade 워크플로와 금지사항(런타임 create_all·수동 ALTER 금지)을 ARCHITECTURE.md §11 기준으로 안내한다.
 ---
 
 # DB 마이그레이션 (Alembic)
 
-> **모든 DB 스키마는 예외 없이 Alembic 마이그레이션으로만 생성·변경한다.** (architecture.md §11)
+> **모든 DB 스키마는 예외 없이 Alembic 마이그레이션으로만 생성·변경한다.** (ARCHITECTURE.md §11)
 > 스키마의 단일 진실 공급원(SSOT)은 마이그레이션 히스토리다. dev/스테이징/운영 동일.
 
 ## 워크플로 (backend 디렉토리에서)

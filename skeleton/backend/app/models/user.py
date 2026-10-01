@@ -1,4 +1,4 @@
-"""사용자 모델 (architecture.md §8).
+"""사용자 모델 (ARCHITECTURE.md §8).
 
 자체 계정 인증용 users 테이블. role 로 일반/관리자를 구분한다.
 """

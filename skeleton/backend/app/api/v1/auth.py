@@ -1,4 +1,4 @@
-"""인증 라우터 (architecture.md §4, §9) — 얇은 HTTP 계층.
+"""인증 라우터 (ARCHITECTURE.md §4, §9) — 얇은 HTTP 계층.
 
 자체 계정 username/password 로그인 → access JWT + DB 세션 기반 refresh 토큰 발급.
 회전(rotate)·폐기(revoke)·시도 제한의 도메인 로직은 services 에 있고, 여기서는

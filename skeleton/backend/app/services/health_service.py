@@ -1,4 +1,4 @@
-"""헬스 체크 서비스 (architecture.md §8).
+"""헬스 체크 서비스 (ARCHITECTURE.md §8).
 
 DB 연결 및 테이블 접근이 정상인지 확인한다.
 """

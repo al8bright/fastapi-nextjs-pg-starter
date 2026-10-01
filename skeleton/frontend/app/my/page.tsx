@@ -2,7 +2,7 @@ import Link from "next/link"
 import LogoutButton from "@/components/LogoutButton"
 import { getSessionUser } from "@/lib/session"
 
-// My 화면 (architecture.md §14). 로그인 사용자 정보 + 로그아웃.
+// My 화면 (ARCHITECTURE.md §14). 로그인 사용자 정보 + 로그아웃.
 // 토큰이 없거나 만료됐으면 getSessionUser 가 /login?next=/my 로 보낸다(여기까지 오지 않는다).
 // user 가 null 이면 세션 문제가 아니라 백엔드 장애다 — 원인을 구분해서 보여준다.
 export default async function MyPage() {

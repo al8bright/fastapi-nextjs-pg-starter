@@ -15,7 +15,7 @@ next-env.d.ts
 # 테스트/커버리지
 coverage/
 
-# 환경변수 (architecture.md §17) — .env.example 만 커밋한다
+# 환경변수 (ARCHITECTURE.md §17) — .env.example 만 커밋한다
 .env
 .env.local
 .env.*.local

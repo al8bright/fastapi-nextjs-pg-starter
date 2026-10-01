@@ -1,4 +1,4 @@
-"""요청 단위 DB 세션 (architecture.md §7).
+"""요청 단위 DB 세션 (ARCHITECTURE.md §7).
 
 엔진/세션 팩토리는 .env 의 DATABASE_URL 로부터 모듈 로드 시 1회 생성한다.
 """

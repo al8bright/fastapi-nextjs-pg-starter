@@ -107,7 +107,7 @@ flowchart LR
 이 프로젝트는 username/password 로그인을 기본 제공한다. FastAPI는 로그인 시 **access JWT(기본 15분)** 와 **DB 세션 기반 refresh 토큰(기본 14일, 불투명 문자열)** 쌍을 발급하고, Next가 이를 httpOnly 쿠키 두 개에 저장한다(운영에서는 `__Host-` 프리픽스). 이후 FastAPI 서버 요청에는 access 토큰을 Bearer로 전달하며, access 쿠키가 만료되면 `proxy.ts`가 refresh 토큰으로 새 쌍을 받아 자동 갱신한다(회전 방식 — 재사용이 감지되면 세션이 폐기된다). 로그아웃은 백엔드에서 refresh 세션을 폐기해 access 토큰도 즉시 무효화한다. 로그인은 계정별 시도 제한(기본 5회 실패 시 15분 잠금, 429)으로 보호되고 보안 이벤트는 `app.audit` 로거에 남는다. 처음 백엔드를 실행할 때 `admin` 계정이 없으면 개발용 관리자 **`admin`** 이 시드된다. 비밀번호는 스캐폴드가 무작위로 생성해 `backend/.env` 의 `DEFAULT_ADMIN_PASSWORD` 에 넣는다.
 
 > [!CAUTION]
-> **시드 관리자는 로컬 개발 전용이다. 배포 전 `APP_ENV=production` 으로 두고 `SECRET_KEY` 를 교체하며 `SEED_DEFAULT_ADMIN=false` 로 끈다 — 두 조건을 어기면 백엔드가 기동을 거부한다.** 전체 항목은 [`docs/architecture.md`의 배포 전 체크리스트](docs/architecture.md#배포-전-체크리스트-스타터-기본값-제거--must)를 확인한다.
+> **시드 관리자는 로컬 개발 전용이다. 배포 전 `APP_ENV=production` 으로 두고 `SECRET_KEY` 를 교체하며 `SEED_DEFAULT_ADMIN=false` 로 끈다 — 두 조건을 어기면 백엔드가 기동을 거부한다.** 전체 항목은 [`ARCHITECTURE.md`의 배포 전 체크리스트](ARCHITECTURE.md#배포-전-체크리스트-스타터-기본값-제거--must)를 확인한다.
 
 `proxy.ts`는 access 쿠키가 없고 refresh 쿠키만 있으면 백엔드로 자동 갱신을 시도하고, 둘 다 없거나 갱신이 401이면 `/login`으로 보낸다. 로그인 성공 후에는 검증된 내부 목적지 또는 홈으로 이동시킨다. `users.role`과 백엔드의 `require_admin` 의존성으로 관리자 API를 보호한다. 프론트는 전 경로에 보안 응답 헤더(CSP, `X-Frame-Options: DENY`, nosniff, Referrer-Policy, Permissions-Policy, 운영 HSTS)를 내보낸다(`next.config.ts`).
 
@@ -174,7 +174,7 @@ flowchart LR
     SchemaOut --> Response["HTTP 응답"]
 ```
 
-세부 디렉터리와 계층 규칙은 [`docs/architecture.md` §4](docs/architecture.md#4-백엔드-구조backendapp)와 [§8](docs/architecture.md#8-모델--스키마--서비스-규칙)을 따른다.
+세부 디렉터리와 계층 규칙은 [`ARCHITECTURE.md` §4](ARCHITECTURE.md#4-백엔드-구조backendapp)와 [§8](ARCHITECTURE.md#8-모델--스키마--서비스-규칙)을 따른다.
 
 ## 개발 워크플로
 
@@ -201,7 +201,7 @@ flowchart TD
     L -- 예 --> N["완료"]
 ```
 
-되돌리기 어렵거나 광범위한 변경, 중간 상태를 `main`에 두고 싶지 않을 때, 리뷰가 필요할 때는 브랜치를 따고 PR을 만든다. 협업자가 생기면 `main` 브랜치 보호와 필수 CI 검사를 켜고 PR 흐름을 기본으로 되돌리는 것을 권장한다. 상세 규칙은 [`docs/architecture.md` §18~§20](docs/architecture.md#18-개발-원칙-tdd--tidy-first)에 있다.
+되돌리기 어렵거나 광범위한 변경, 중간 상태를 `main`에 두고 싶지 않을 때, 리뷰가 필요할 때는 브랜치를 따고 PR을 만든다. 협업자가 생기면 `main` 브랜치 보호와 필수 CI 검사를 켜고 PR 흐름을 기본으로 되돌리는 것을 권장한다. 상세 규칙은 [`ARCHITECTURE.md` §18~§20](ARCHITECTURE.md#18-개발-원칙-tdd--tidy-first)에 있다.
 
 ## DB 마이그레이션
 
@@ -221,7 +221,7 @@ cd backend
 ./.venv/bin/python -m alembic upgrade head
 ```
 
-자세한 검토와 롤백 원칙은 [`docs/architecture.md` §11](docs/architecture.md#11-마이그레이션-alembic---must-db는-항상-alembic으로-관리)을 참고한다.
+자세한 검토와 롤백 원칙은 [`ARCHITECTURE.md` §11](ARCHITECTURE.md#11-마이그레이션-alembic---must-db는-항상-alembic으로-관리)을 참고한다.
 
 ## 테스트와 품질 검사
 
@@ -258,7 +258,7 @@ pnpm build
 - 백엔드는 `backend/.env.example`을 복사한 `backend/.env`를 사용한다. `DATABASE_URL`, `SECRET_KEY`, CORS, 토큰 만료 시간과 기본 관리자 시드를 여기서 설정한다.
 - 프론트엔드는 `frontend/.env.example`을 복사한 `frontend/.env`를 사용한다. 서버에서 FastAPI를 호출할 주소는 서버 전용 `FASTAPI_URL`로 설정한다.
 - ⛔ 서버 전용 값에 `NEXT_PUBLIC_`을 붙이면 클라이언트 번들에 값이 포함되므로 남용하지 않는다.
-- 실제 `.env` 파일은 커밋하지 않는다. 배포 전에는 위 기본 계정 경고와 [`docs/architecture.md` §21](docs/architecture.md#21-신규-프로젝트-부트스트랩-체크리스트)을 다시 확인한다.
+- 실제 `.env` 파일은 커밋하지 않는다. 배포 전에는 위 기본 계정 경고와 [`ARCHITECTURE.md` §21](ARCHITECTURE.md#21-신규-프로젝트-부트스트랩-체크리스트)을 다시 확인한다.
 - Unix 계열은 `TZ=Asia/Seoul`을 프로세스 시각대에 적용한다. Windows는 OS 시각대를 서울(UTC+9)로 설정해야 하며, 불일치하면 애플리케이션이 경고한다.
 
 ## 기술 스택과 버전
@@ -315,7 +315,9 @@ pnpm build
 
 ## 상세 문서
 
-- [`docs/architecture.md`](docs/architecture.md): 이 프로젝트의 아키텍처, MUST 규칙과 배포 전 체크리스트
+- [`ARCHITECTURE.md`](ARCHITECTURE.md): 이 프로젝트의 아키텍처, MUST 규칙과 배포 전 체크리스트
+- [`DESIGN.md`](DESIGN.md): 디자인 토큰(색상/타이포그래피)
 - [`PLAN.md`](PLAN.md): TDD 작업 순서와 기능별 체크리스트
-- [`CLAUDE.md`](CLAUDE.md): 저장소 안에서 자립적으로 동작하는 AI 개발 지침
+- [`AGENTS.md`](AGENTS.md): 저장소 안에서 자립적으로 동작하는 AI 에이전트 공통 지침 ([`CLAUDE.md`](CLAUDE.md)가 import)
+- [`docs/`](docs/README.md): PRD·유저 플로우·기획서 등 프로젝트 고유 문서
 - [`.claude/skills/`](.claude/skills/): 백엔드 도메인, 마이그레이션, 프론트 기능, PR과 버전 작업을 위한 선택적 작업별 가이드

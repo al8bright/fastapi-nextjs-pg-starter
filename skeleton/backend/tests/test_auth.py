@@ -1,4 +1,4 @@
-"""인증 유저플로우 테스트 (architecture.md §12)."""
+"""인증 유저플로우 테스트 (ARCHITECTURE.md §12)."""
 import time
 
 import jwt

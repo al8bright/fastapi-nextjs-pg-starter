@@ -11,7 +11,7 @@
 
 ## ★ 핵심 MUST 요약 (반드시 고정)
 
-> 아래 항목은 **프로젝트마다 바뀌지 않는 고정 규칙**이다. 어기려면 `docs/architecture.md`에 사유를 남기되, ⛔ 표시 항목은 예외 없이 금지한다.
+> 아래 항목은 **프로젝트마다 바뀌지 않는 고정 규칙**이다. 어기려면 `ARCHITECTURE.md`에 사유를 남기되, ⛔ 표시 항목은 예외 없이 금지한다.
 > 세부 내용은 각 섹션(§) 참조.
 
 | # | 고정 규칙 (MUST) | § |
@@ -37,9 +37,9 @@
 ## 0. 적용 범위 & 우선순위
 
 - **MUST**: 이 템플릿을 적용한 프로젝트는 반드시 따른다.
-- **SHOULD**: 특별한 사유가 없으면 따른다. 벗어나면 `docs/architecture.md`에 사유를 남긴다.
+- **SHOULD**: 특별한 사유가 없으면 따른다. 벗어나면 `ARCHITECTURE.md`에 사유를 남긴다.
 - **MAY**: 프로젝트 성격에 따라 선택한다.
-- 본 가이드와 프로젝트의 추가 문서가 충돌하면 **본 가이드 우선**. 예외는 프로젝트 `docs/architecture.md`에 사유와 함께 명시한다.
+- 본 가이드와 프로젝트의 추가 문서가 충돌하면 **본 가이드 우선**. 예외는 프로젝트 `ARCHITECTURE.md`에 사유와 함께 명시한다.
 
 ---
 
@@ -96,7 +96,7 @@
 > ⛔ **브라우저에서 FastAPI 를 직접 호출하지 않는다.** 브라우저는 Next 하고만 통신하고, FastAPI 호출은 전부 서버에서 일어난다.
 > ⛔ **토큰을 `localStorage`·클라이언트 상태에 두지 않는다.** 세션은 httpOnly 쿠키뿐이다(§14).
 > ⛔ Route Handler(`app/api/**/route.ts`)를 습관적으로 만들지 않는다 — 브라우저가 FastAPI 를 부르지 않으므로 BFF 엔드포인트가 필요 없다.
-> 꼭 필요한 예외(웹훅 수신 등)는 그 사유를 `docs/architecture.md`에 남긴다.
+> 꼭 필요한 예외(웹훅 수신 등)는 그 사유를 `ARCHITECTURE.md`에 남긴다.
 
 ---
 
@@ -122,9 +122,12 @@
 │   ├── next.config.ts
 │   ├── postcss.config.mjs
 │   └── tsconfig.json
-├── docs/
-│   ├── architecture.md          # 본 가이드에서 벗어난 결정/사유 기록
-│   └── <연동>-가이드.md          # 선택 (SSO/ERP 등 외부 연동)
+├── docs/                        # 프로젝트 고유 문서 (PRD·유저 플로우·기획서·<연동>-가이드 등)
+│   └── README.md
+├── AGENTS.md                    # AI 에이전트 공통 지침 (CLAUDE.md 가 @import)
+├── CLAUDE.md                    # Claude Code 진입점
+├── ARCHITECTURE.md              # 본 가이드 — 벗어난 결정/사유도 여기 기록
+├── DESIGN.md                    # 디자인 토큰(색상/타이포그래피) — 테마(@theme)의 원본
 ├── PLAN.md                      # TDD 작업 순서 (필수)
 └── README.md
 ```
@@ -1119,7 +1122,7 @@ gh pr merge --squash --delete-branch
 
 ## 21. 신규 프로젝트 부트스트랩 체크리스트
 
-- [ ] 저장소 구조(§3) 생성, `PLAN.md` / `backend/.env.example` / `frontend/.env.example` / `docs/architecture.md` / `.gitignore`(실제 `.env` 제외) 작성
+- [ ] 저장소 구조(§3) 생성, `PLAN.md` / `backend/.env.example` / `frontend/.env.example` / `ARCHITECTURE.md` / `.gitignore`(실제 `.env` 제외) 작성
 - [ ] 백엔드 `app/` 골격(§4): `main.py`, `config.py`, `dependencies.py`, `db/`, `core/security.py`
 - [ ] `Settings` + `get_settings()` (§5) — **설정은 서비스별 `.env`로 주입, OS 독립 (MUST §5)**, CORS, Unix `TZ=Asia/Seoul`+`tzset()` / Windows OS 시각대 `서울`(UTC+9) 및 불일치 경고 확인
 - [ ] PostgreSQL `connect_args` KST 고정 (§7, §10)

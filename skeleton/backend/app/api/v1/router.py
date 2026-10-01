@@ -1,4 +1,4 @@
-"""API v1 라우터 집계 (architecture.md §4)."""
+"""API v1 라우터 집계 (ARCHITECTURE.md §4)."""
 from fastapi import APIRouter
 
 from app.api.v1 import auth, health

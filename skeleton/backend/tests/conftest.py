@@ -1,4 +1,4 @@
-"""테스트 공통 픽스처 (architecture.md §12).
+"""테스트 공통 픽스처 (ARCHITECTURE.md §12).
 
 DB 는 SQLite in-memory 를 쓰고, get_db 의존성을 오버라이드한다.
 create_all 은 테스트에서만 허용된다 (§11 예외).

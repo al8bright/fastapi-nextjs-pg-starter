@@ -1,11 +1,11 @@
 ---
 name: add-frontend-feature
-description: __PROJECT_NAME__ 프론트엔드(Next.js App Router)에 기능·페이지·데이터 조회/변경을 추가할 때 사용. 서버 컴포넌트 직접 fetch + Server Action + httpOnly 쿠키 세션 표준(lib/types.ts → lib/server/<domain>.ts → app/<route>/page.tsx → lib/actions/<domain>.ts)과 proxy 보호 라우트를 architecture.md §13·§14 기준으로 안내한다.
+description: __PROJECT_NAME__ 프론트엔드(Next.js App Router)에 기능·페이지·데이터 조회/변경을 추가할 때 사용. 서버 컴포넌트 직접 fetch + Server Action + httpOnly 쿠키 세션 표준(lib/types.ts → lib/server/<domain>.ts → app/<route>/page.tsx → lib/actions/<domain>.ts)과 proxy 보호 라우트를 ARCHITECTURE.md §13·§14 기준으로 안내한다.
 ---
 
 # 프론트엔드 기능 추가
 
-표준 스택: **Next.js App Router + React Server Components + Server Actions** (architecture.md §13). 패키지 매니저는 **pnpm**(⛔ npm 금지).
+표준 스택: **Next.js App Router + React Server Components + Server Actions** (ARCHITECTURE.md §13). 패키지 매니저는 **pnpm**(⛔ npm 금지).
 
 > **경계 규칙 — 이 스캐폴드의 전제다(§13).**
 > 브라우저는 **Next 하고만** 통신한다(세션은 httpOnly 쿠키, JS 로 못 읽는다).

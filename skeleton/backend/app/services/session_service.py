@@ -1,4 +1,4 @@
-"""인증 세션(refresh 토큰) 서비스 (architecture.md §8, §9) — 비즈니스 로직.
+"""인증 세션(refresh 토큰) 서비스 (ARCHITECTURE.md §8, §9) — 비즈니스 로직.
 
 refresh 토큰 1개 = auth_sessions 행 1개. 평문은 저장하지 않고 SHA-256 hex 만 저장하며,
 비교는 hmac.compare_digest(상수시간)로 한다. 세션 행이 살아 있어야(sid) access 토큰도

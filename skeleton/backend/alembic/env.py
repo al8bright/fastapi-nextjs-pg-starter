@@ -1,4 +1,4 @@
-"""Alembic 환경 (architecture.md §11).
+"""Alembic 환경 (ARCHITECTURE.md §11).
 
 - DB URL 은 app.config.get_settings() 에서 가져온다.
 - import app.models 로 모든 모델을 로드한 뒤 Base.metadata 를 target 으로 한다.

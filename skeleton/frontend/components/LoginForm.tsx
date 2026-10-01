@@ -3,7 +3,7 @@
 import { useActionState } from "react"
 import { loginAction, type LoginState } from "@/lib/actions/auth"
 
-// 로그인 폼 (architecture.md §14). 제출 경로가 일반적인 SPA 방식과 다르다:
+// 로그인 폼 (ARCHITECTURE.md §14). 제출 경로가 일반적인 SPA 방식과 다르다:
 //   SPA 방식 : useState 로 값 보관 → 브라우저가 API POST → localStorage 저장 → navigate
 //   여기     : 브라우저가 FormData 를 Server Action 으로 보냄 → 서버가 FastAPI 호출 → httpOnly 쿠키 → redirect
 //

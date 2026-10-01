@@ -1,4 +1,4 @@
-// 백엔드 스키마와 동기화되는 타입 (architecture.md §8, §13).
+// 백엔드 스키마와 동기화되는 타입 (ARCHITECTURE.md §8, §13).
 // 원본은 backend/app/schemas/user.py · health.py 다 — 백엔드를 바꾸면 여기도 함께 바꾼다.
 
 export type UserRole = "user" | "admin"

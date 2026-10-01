@@ -17,5 +17,5 @@
 
 - [ ] 모든 테스트 통과 + 린트 경고 0
 - [ ] Structural / Behavioral 를 섞지 않음
-- [ ] DB 변경 시 Alembic 마이그레이션 포함 (architecture.md §11)
-- [ ] 설정 변경 시 `.env.example` 갱신 (architecture.md §5, §17)
+- [ ] DB 변경 시 Alembic 마이그레이션 포함 (ARCHITECTURE.md §11)
+- [ ] 설정 변경 시 `.env.example` 갱신 (ARCHITECTURE.md §5, §17)

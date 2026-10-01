@@ -6,7 +6,7 @@ import { fastapiErrorMessage, fastapiFetch } from "@/lib/server/fastapi"
 import { clearSessionTokens, getRefreshToken, setSessionTokens } from "@/lib/session"
 import type { TokenResponse } from "@/lib/types"
 
-// 인증 Server Action (architecture.md §14).
+// 인증 Server Action (ARCHITECTURE.md §14).
 // 로그인/로그아웃 요청은 브라우저가 아니라 **Next 서버**가 보내고, 토큰은 응답 본문에 실려 나가지 않고
 // httpOnly 쿠키로만 남는다. 클라이언트가 돌려받는 것은 오류 문구뿐이다.
 //

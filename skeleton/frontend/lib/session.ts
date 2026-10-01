@@ -10,7 +10,7 @@ import {
 } from "@/lib/session-cookie"
 import type { TokenResponse, User } from "@/lib/types"
 
-// 세션 = httpOnly 쿠키 단일 출처 (architecture.md §14).
+// 세션 = httpOnly 쿠키 단일 출처 (ARCHITECTURE.md §14).
 // localStorage 에 토큰을 두는 SPA 방식과 달리,
 // 이 토큰들은 **브라우저 JS 가 읽을 수 없다**. 따라서 XSS 로 토큰을 탈취당하지 않고,
 // 대신 FastAPI 호출은 전부 서버(서버 컴포넌트 / Server Action)에서만 일어난다.

@@ -1,11 +1,11 @@
 ---
 name: pr-workflow
-description: __PROJECT_NAME__ 에서 변경을 커밋·push 할 때 사용. main 직접 커밋 기본 흐름, push 전 로컬 검증 게이트, 커밋 메시지 형식([Structural]/[Behavioral]), Structural·Behavioral 분리, 선택적 브랜치·PR 사용 기준을 architecture.md §19·§20 기준으로 안내한다.
+description: __PROJECT_NAME__ 에서 변경을 커밋·push 할 때 사용. main 직접 커밋 기본 흐름, push 전 로컬 검증 게이트, 커밋 메시지 형식([Structural]/[Behavioral]), Structural·Behavioral 분리, 선택적 브랜치·PR 사용 기준을 ARCHITECTURE.md §19·§20 기준으로 안내한다.
 ---
 
 # 커밋 · push (브랜치·PR은 선택)
 
-> 기본 흐름은 **`main`에서 작업 → 로컬 검증 → 커밋 → push** 다. (architecture.md §20)
+> 기본 흐름은 **`main`에서 작업 → 로컬 검증 → 커밋 → push** 다. (ARCHITECTURE.md §20)
 
 ## ⛔ push 전 로컬 검증이 유일한 게이트다
 

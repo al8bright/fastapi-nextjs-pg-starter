@@ -42,7 +42,7 @@ description: __PROJECT_NAME__ 의 고정 스택 버전과 버전별 주의사항
   - 서버 → 클라이언트로 넘기는 props 는 **직렬화 가능한 값**만 된다(함수·클래스 인스턴스 불가).
 - ⛔ **서버 전용 모듈이 클라이언트 번들로 새는 문제**가 이 스택의 1순위 사고다. FastAPI 호출·세션·비밀값을 다루는 모듈은 첫 줄에 **`import "server-only"`** 를 넣어라 — 클라이언트가 import 하는 순간 빌드가 실패해 즉시 잡힌다. 없으면 조용히 번들에 섞여 나간다.
 - ⛔ **`NEXT_PUBLIC_` 을 붙이면 그 값은 빌드 시 클라이언트 번들에 그대로 박힌다.** `FASTAPI_URL` 같은 서버 전용 값에 절대 붙이지 마라. 브라우저가 진짜로 읽어야 하는 공개 값에만 쓴다.
-- 배포는 **Node 런타임**이다(`next build` → `next start`). ⛔ 정적 호스팅으로는 서버 컴포넌트·Server Action·`proxy.ts` 가 동작하지 않는다. dev 포트는 **3000**. `next.config.ts` 는 `productionBrowserSourceMaps: false` 와 보안 응답 헤더(`headers()` — CSP·HSTS 등, architecture.md §13)만 둔다 — ⛔ `output: "export"` 를 켜면 위 세 가지가 전부 죽는다.
+- 배포는 **Node 런타임**이다(`next build` → `next start`). ⛔ 정적 호스팅으로는 서버 컴포넌트·Server Action·`proxy.ts` 가 동작하지 않는다. dev 포트는 **3000**. `next.config.ts` 는 `productionBrowserSourceMaps: false` 와 보안 응답 헤더(`headers()` — CSP·HSTS 등, ARCHITECTURE.md §13)만 둔다 — ⛔ `output: "export"` 를 켜면 위 세 가지가 전부 죽는다.
 - 번들러는 Vite 가 아니다(Turbopack/webpack). ⛔ Vite 플러그인·`import.meta.env`·`vite.config.ts` 전제를 끌어오지 말 것. (`vitest.config.ts` 는 **테스트 전용**이며 빌드와 무관하다.)
 
 ### Server Actions / 쿠키
@@ -90,14 +90,14 @@ description: __PROJECT_NAME__ 의 고정 스택 버전과 버전별 주의사항
 - v2 API(`model_config`, `@field_validator`, `SettingsConfigDict`). ⛔ v1 패턴(`class Config`, `@validator`) 금지.
 
 ### 인증 / 린트·CI
-- 자체 계정 비밀번호는 **bcrypt** 해시(`core/security` 의 `hash_password`/`verify_password`, 새 비밀번호는 `validate_new_password` — 최소 8자 + 72 bytes 상한). access JWT 클레임은 `sub`(user id)·`sid`(세션 id)·`iat`·`exp`·`typ:"access"` — `sid` 없는 토큰은 401 이다. refresh 토큰은 JWT 가 아니라 DB(`auth_sessions`)에 해시로 저장되는 **불투명 토큰**이다(회전·재사용 감지·로그인 스로틀은 architecture.md §9).
+- 자체 계정 비밀번호는 **bcrypt** 해시(`core/security` 의 `hash_password`/`verify_password`, 새 비밀번호는 `validate_new_password` — 최소 8자 + 72 bytes 상한). access JWT 클레임은 `sub`(user id)·`sid`(세션 id)·`iat`·`exp`·`typ:"access"` — `sid` 없는 토큰은 401 이다. refresh 토큰은 JWT 가 아니라 DB(`auth_sessions`)에 해시로 저장되는 **불투명 토큰**이다(회전·재사용 감지·로그인 스로틀은 ARCHITECTURE.md §9).
 - 프론트 린트는 **ESLint flat config**(`frontend/eslint.config.mjs`): `@eslint/js` recommended + **`eslint-config-next/core-web-vitals`** + **`eslint-config-next/typescript`**. ⚠️ `core-web-vitals` 만 넣으면 **타입스크립트 규칙이 하나도 켜지지 않아**(파서만 붙는다) `any`·미사용 변수를 못 잡는다 — `typescript` 진입점을 반드시 함께 넣는다. 이 계열의 eslint-config-next 는 flat config 배열을 그대로 export 하므로 `FlatCompat`(Next 15 시절 템플릿)로 감쌀 필요가 없다. ⚠️ **ESLint 10 + eslint-plugin-react 조합의 함정**: eslint-plugin-react 의 React 버전 자동 감지(`"detect"`)가 v10 에서 제거된 `context.getFilename()` 을 아직 호출해 린트가 크래시한다 — `eslint.config.mjs` 의 `settings: { react: { version: "..." } }` 명시가 그 우회이므로 **지우면 안 된다**(React 상향 시 이 값도 함께 갱신). 향후 다른 제거 API 로 lint 가 또 크래시하면 eslint `^9` 복귀가 대안이다. ⚠️ **ESLint 본체 메이저는 `eslint-config-next` 가 요구하는 계열에 맞춘다** — 다른 프로젝트에서 더 앞선 ESLint 메이저를 쓰더라도 여기서는 eslint-config-next 가 지원하는 계열을 따른다. 실제 값은 `frontend/package.json`(§1).
 - 백엔드 린트는 **ruff**(`backend/pyproject.toml`): FastAPI `Depends` 등은 **B008 예외**(`extend-immutable-calls`), `alembic/` 제외, line-length 120. 새 의존성으로 lint 가 깨지면 이 설정을 먼저 본다.
 - **CI**(`.github/workflows/ci.yml`)가 push·PR(main) 마다 실행: `backend`(ruff → pytest(SQLite in-memory))는 **`ubuntu-latest`·`windows-latest` OS 매트릭스**로 돌려 OS 분기 버그를 잡고, `migrations`(**alembic upgrade head + alembic check**, postgres:16 서비스 컨테이너에 `DATABASE_URL` 주입)는 **ubuntu 전용 잡**으로 분리한다 — ⛔ 서비스 컨테이너는 Linux 러너에서만 뜨므로 매트릭스 잡에 `services:` 를 두면 Windows 잡이 시작조차 못 한다. `powershell-syntax` 잡은 Windows PowerShell 5.1 로 모든 `.ps1` 을 파싱하고 PS7 전용 토큰(`??`·`&&`·`||`·`?.`)을 거부한다. frontend 는 **`eslint` → `typecheck`(`tsc --noEmit`) → `test`(vitest) → `build`(`next build`)** 순으로 돈다. `backend-audit`(pip-audit)·`frontend-audit`(`pnpm audit --prod`) 잡은 의존성 취약점을 스캔하는 **경고성**(`continue-on-error`) 잡이다 — 새 CVE 는 커밋 없이도 공개되므로 실패로 두지 않는 대신, 로그의 ⚠ 표시를 주기적으로 확인해 패치한다. Python/Node 버전은 하드코딩 대신 **`python-version-file: .python-version` / `node-version-file: .nvmrc`** 로 읽으므로 버전 상향 시 핀 파일만 갱신하면 된다. 워크플로는 생성 프로젝트(루트)에서만 동작한다.
 - frontend 는 **`pnpm-lock.yaml` 커밋 필수** — 템플릿이 검증한 해석 버전이 lockfile 로 스캐폴드에 포함돼 오므로, **생성 프로젝트의 최초 커밋에 반드시 포함**시킨다. CI 환경(`CI=true`)의 pnpm 은 frozen-lockfile 이 기본이라 lockfile 이 없거나 `package.json` 과 어긋나면 설치가 실패한다. 의존성 변경 시 lockfile 도 함께 커밋한다.
 
 ## 4. 백엔드 핀 정책
-- `requirements.txt` 는 **`==` 정확 핀, 재현성 우선**(architecture.md §2).
+- `requirements.txt` 는 **`==` 정확 핀, 재현성 우선**(ARCHITECTURE.md §2).
 - 런타임 최소를 올린다고(예: 3.13) 핀을 자동으로 올리지 말 것 — **호환되면 유지**(현재 핀은 3.13 호환 확인됨).
 - 핀 상향은 보안/기능 목적의 **의식적 결정**으로. FastAPI 는 "최신이 아닌 안정화된 마이너" 선호.
 
@@ -112,7 +112,7 @@ description: __PROJECT_NAME__ 의 고정 스택 버전과 버전별 주의사항
    - Windows 는 `.\.venv\Scripts\python` 으로 바꿔 읽는다.
 3. 프론트: `pnpm install` → `pnpm lint` → `pnpm typecheck` → `pnpm test` → `pnpm build`
    - ⚠️ 서버/클라이언트 경계 위반(서버 전용 모듈 유출 등)은 **`pnpm build` 에서야 드러난다.** 앞 단계가 통과했다고 건너뛰지 말 것.
-4. 통과 시 핀 고정 후 **갱신할 곳을 모두**: SSOT 파일(`requirements.txt` 또는 `package.json` + `pnpm-lock.yaml`) + `README.md` 의 "기술 스택과 버전" 표 + 필요 시 `docs/architecture.md` + **이 스킬의 §3 버전별 함정**. 커밋은 [pr-workflow].
+4. 통과 시 핀 고정 후 **갱신할 곳을 모두**: SSOT 파일(`requirements.txt` 또는 `package.json` + `pnpm-lock.yaml`) + `README.md` 의 "기술 스택과 버전" 표 + 필요 시 `ARCHITECTURE.md` + **이 스킬의 §3 버전별 함정**. 커밋은 [pr-workflow].
    - §2 표에는 개별 패키지 버전이 없으므로 갱신 대상이 아니다. 런타임 하한이나 고정 방식 자체를 바꿀 때만 손댄다.
 
 > §5 의 1단계는 `-SkipDb -SkipInstall` 을 쓰지만, 이 옵션들은 DB 단계와 의존성 설치만 생략한다. **런타임 사전 검사와 bootstrap 선행 실행은 생략되지 않는다**(§20).
