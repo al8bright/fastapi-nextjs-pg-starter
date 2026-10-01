@@ -11,7 +11,7 @@ description: __PROJECT_NAME__ 프론트엔드(Next.js App Router)에 기능·페
 > 브라우저는 **Next 하고만** 통신한다(세션은 httpOnly 쿠키, JS 로 못 읽는다).
 > FastAPI 는 **Next 서버**만 호출한다(`Authorization: Bearer <JWT>`).
 > ⛔ **브라우저에서 FastAPI 직접 호출 금지.** ⛔ axios · React Query · Zustand · `localStorage` 전부 안 쓴다.
-> ⛔ `app/api/**/route.ts` 를 습관적으로 만들지 마라 — 브라우저가 FastAPI 를 부르지 않으므로 BFF 엔드포인트가 필요 없다. 꼭 필요하다고 판단되면 이유를 남기고 확인받는다.
+> ⛔ `app/api/**/route.ts` 를 습관적으로 만들지 마라 — 브라우저가 FastAPI 를 부르지 않으므로 BFF 엔드포인트가 필요 없다. 꼭 필요하다고 판단되면 이유를 남기고 확인받는다. (현재 유일한 예외: 관리자 첨부 다운로드 `app/admin/notices/[id]/attachments/[attachmentId]/route.ts` — 쿠키 세션을 Bearer 로 바꿔 **파일을 스트리밍 중계**하는 일은 Server Action 이 못 한다. 공개 파일 `/uploads/*`·공개 첨부는 `next.config.ts` 의 rewrite 다.)
 
 ## 순서
 
@@ -81,7 +81,7 @@ description: __PROJECT_NAME__ 프론트엔드(Next.js App Router)에 기능·페
      )
    }
    ```
-   - 느린 조회는 `<Suspense fallback={…}>` 로 감싼 **async 하위 컴포넌트**로 떼어낸다(`app/landing/page.tsx` 가 이 패턴이다). 클라이언트 로딩 상태를 만들지 않는다.
+   - 느린 조회는 `<Suspense fallback={…}>` 로 감싼 **async 하위 컴포넌트**로 떼어낸다(`app/admin/system/page.tsx`·`app/(site)/page.tsx` 가 이 패턴이다). 클라이언트 로딩 상태를 만들지 않는다.
    - 상호작용(입력·토글·낙관적 UI)이 필요한 **조각만** `frontend/components/<Name>.tsx` 로 떼어내 첫 줄에 `'use client'` 를 붙인다. 페이지 전체를 클라이언트 컴포넌트로 만들지 말 것 — 그 순간 서버 렌더링 이점이 사라진다.
    - 컴포넌트 파일명 = 컴포넌트명, `PascalCase.tsx`, default export.
    - 클라이언트 상태는 **지역 `useState`** 로 충분하다. 전역 스토어를 새로 도입하지 않는다 — 세션의 유일한 출처는 쿠키다.
@@ -152,20 +152,22 @@ description: __PROJECT_NAME__ 프론트엔드(Next.js App Router)에 기능·페
 
 5. **보호 라우트** `frontend/proxy.ts`
    - matcher 는 **제외 목록(negative lookahead)** 이다 — 새 라우트는 기본적으로 보호된다. 페이지마다 가드를 손으로 넣지 않는다.
+   - **로그인 없이 보여 줄 화면**(현재 `/`·`/notices`·`/notices/<id>`)은 matcher 에서 빼지 않고 `lib/public-paths.ts` 의 `isPublicPath` **허용 목록**에 더한다 — proxy 가 통과시키면서 만료된 access 쿠키를 refresh 로 이어 줘야 헤더가 로그인 상태를 바르게 보인다. matcher 제외는 세션과 무관한 정적 자산·파일(`_next/`·`uploads/`·`api/v1/notices/`·확장자 파일)에만 쓴다. 공개 화면을 늘리면 `lib/public-paths.test.ts` 도 함께 고친다.
+   - **관리자 화면**은 `app/admin/<경로>/page.tsx` 에 두면 `app/admin/layout.tsx` 의 관리자 가드(role≠admin → 403)와 사이드바 틀을 그대로 받는다. 메뉴는 `components/layout/adminNav.ts` 에 함께 등록한다. 조회는 `loadForPage(현재경로, () => …)`(`lib/server/load.ts` — 401 → 로그인, 그 밖 → 문구)로 감싼다. 권한 경계는 백엔드 `require_admin` 이다.
    - access 쿠키(`SESSION_COOKIE`)의 **존재만** 확인하고 통과시킨다. 서명 검증·만료 확인은 하지 않는다(실제 판정은 FastAPI 가 한다, §14). access 가 없고 refresh 쿠키(`REFRESH_COOKIE`)만 있으면 백엔드 `/auth/refresh` 로 **자동 갱신**하고(성공 시 두 쿠키 교체 후 통과, 401 이면 쿠키 파기), 둘 다 없으면 `/login?next=<pathname+search>` 로 보낸다. ⛔ 이 refresh 로직을 페이지·액션에 복제하지 마라 — proxy 한 곳이다.
    - ⛔ matcher 에서 `/login`·`_next/static`·`_next/image`·**확장자가 있는 정적 파일**을 빼지 않으면 무한 리다이렉트다(`/login` 요청 → 쿠키 없음 → `/login` → …).
    ```ts
    export const config = {
      //          login = 로그인 화면 자신 · _next/static|image = 빌드 산출물·이미지 최적화
      //          `.*\.` = favicon.ico 처럼 확장자가 있는 public 정적 파일
-     matcher: ["/((?!login(?:/|$)|_next/|.*\\.(?:ico|png|jpg|jpeg|gif|svg|webp|avif|css|js|map|txt|xml|json|webmanifest|woff2?)$).*)"],
+     matcher: ["/((?!login(?:/|$)|_next/|uploads/|api/v1/notices/|.*\\.(?:ico|png|jpg|jpeg|gif|svg|webp|avif|css|js|map|txt|xml|json|webmanifest|woff2?)$).*)"],
    }
    ```
    - 공개 페이지를 늘리려면 이 정규식의 제외 목록에 추가한다(예: `(?!login|signup|_next/…)`). ⛔ 보호 경로를 나열하는 방식으로 바꾸면 새 라우트가 조용히 무방비가 된다.
    - ⚠️ **오픈 리다이렉트 방지**: `next` 파라미터는 그대로 쓰면 취약점이 된다. `safeRedirect()` 로 **내부 경로만** 통과시킨다 — `/` 로 시작(이것만으로 `https:`·`javascript:` 가 걸러진다)하고, 두 번째 문자가 `/`·`\` 가 아니며, 백슬래시·공백·제어문자가 없고, `/login` 자신이 아닌 것만. 그 밖에는 `/` 로 떨어뜨린다(query·hash 는 보존). 이 검증 함수에는 **테스트를 반드시 붙인다.**
 
 6. **테스트** `frontend/` — Vitest (`pnpm test`)
-   - 대상 파일 옆에 `*.test.ts(x)`(`vitest.config.ts` 의 include 는 `{app,components,lib}/**/*.test.{ts,tsx}`). 우선순위는 **`lib/` 의 순수 함수**(특히 `safe-redirect`, 에러 메시지 매핑, 타입 가드)와 **클라이언트 컴포넌트**(폼이 Action 에 넘기는 FormData, 오류 표시, 대기 중 비활성)다. 스켈레톤의 예시는 `lib/safe-redirect.test.ts`·`lib/session-cookie.test.ts`·`lib/fastapi-error.test.ts`(순수 함수)와 `components/LoginForm.test.tsx`(클라이언트 폼) 네 개다.
+   - 대상 파일 옆에 `*.test.ts(x)`(`vitest.config.ts` 의 include 는 `{app,components,lib}/**/*.test.{ts,tsx}`). 우선순위는 **`lib/` 의 순수 함수**(특히 `safe-redirect`, 에러 메시지 매핑, 타입 가드)와 **클라이언트 컴포넌트**(폼이 Action 에 넘기는 FormData, 오류 표시, 대기 중 비활성)다. 스켈레톤의 예시는 `lib/safe-redirect.test.ts`·`lib/session-cookie.test.ts`·`lib/fastapi-error.test.ts`·`lib/api-error.test.ts`·`lib/listParams.test.ts`(순수 함수)와 `components/LoginForm.test.tsx`·`components/admin/NoticeForm.test.tsx`·`UsersTable.test.tsx`(클라이언트 폼·표 — 액션 모듈은 `vi.mock`, `next/navigation` 은 필요한 훅만 mock)다.
    - ⛔ `lib/server/*`·`lib/session.ts`·`lib/actions/*` 는 `server-only` 를 끌고 와 러너에서 **로드조차 되지 않는다.** 클라이언트 컴포넌트 테스트는 Action 모듈을 통째로 `vi.mock` 해서 끊는다(`vi.mock("@/lib/actions/auth", …)`).
    - ⚠️ **서버 컴포넌트와 Server Action 은 러너 밖의 Next 런타임(요청 컨텍스트·`cookies()`·캐시)에 의존한다.** **억지로 테스트를 만들지 마라** — 무리하게 모킹한 테스트는 구현을 고정할 뿐 회귀를 못 잡는다. 대신 로직을 순수 함수로 뽑아 그것을 테스트하고, 통합 확인은 `pnpm build` + 수동 동작 확인으로 대신한다.
    - `tsc --noEmit`·`eslint` 가 못 잡는 **런타임 동작**을 고정한다 — §14 가 ⛔ 로 규정한 것들 중 **러너에서 검증 가능한 것**(오픈 리다이렉트 통과, 복귀 경로의 query 보존, 로그인 실패 문구 표시)이 1순위다. 미인증 접근 차단은 proxy 몫이라 여기서 덮지 못한다 — `pnpm build` 후 수동으로 확인한다.

@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useActionState } from "react"
 import { loginAction, type LoginState } from "@/lib/actions/auth"
 
@@ -69,6 +70,12 @@ export default function LoginForm({ next }: { next: string }) {
       >
         {isPending ? "로그인 중…" : "로그인"}
       </button>
+      <Link
+        href="/"
+        className="mt-4 flex min-h-11 items-center justify-center rounded text-sm text-on-surface-variant hover:text-on-surface"
+      >
+        ← 홈으로
+      </Link>
 
       {/* 개발 편의 안내 — 비밀번호는 스캐폴드가 프로젝트마다 무작위로 생성한다.
           ⛔ 자격증명 자체를 화면에 찍지 않는다. 프로덕션 번들에서는 이 블록이 통째로 빠진다. */}

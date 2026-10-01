@@ -54,7 +54,7 @@
 | **Python 모듈 파일** | `snake_case`, 모델은 **단수** | `order.py`, `auth_service.py` |
 | **프론트 컴포넌트 파일** | `PascalCase.tsx`, 파일명 = 컴포넌트명 | `LoginForm.tsx`, `EventCalendar.tsx` |
 | **App Router 라우트 파일** | 프레임워크 규약 파일명은 **소문자 고정**(임의 변경 불가) | `page.tsx`, `layout.tsx`, `route.ts`, `proxy.ts` |
-| **라우트 디렉토리** | `kebab-case` (URL 경로가 그대로 된다) | `app/my/`, `app/order-history/` |
+| **라우트 디렉토리** | `kebab-case` (URL 경로가 그대로 된다) | `app/admin/login-throttles/`, `app/order-history/` |
 | **환경변수 접두** | 백엔드는 `UPPER_SNAKE`. 프론트는 **서버 전용이 기본이라 접두 없음**, 클라이언트 노출이 꼭 필요할 때만 `NEXT_PUBLIC_` | `DATABASE_URL`, `FASTAPI_URL`, `NEXT_PUBLIC_SITE_NAME` |
 | **세션 쿠키 이름** | access `<project>_session` + refresh `<project>_refresh` 로 충돌 방지 (httpOnly 쿠키 2개, production 은 `__Host-` 프리픽스 §14) | `my_project_session`, `my_project_refresh` |
 
@@ -111,7 +111,8 @@
 │   ├── requirements.txt
 │   ├── .env.example
 │   ├── pytest.ini
-│   └── tests/
+│   ├── tests/
+│   └── uploads/                 # UPLOAD_DIR 기본값 — 업로드 파일(public/·private/), .gitignore 대상
 ├── frontend/
 │   ├── app/                     # App Router (page/layout/globals.css)
 │   ├── components/              # 'use client' 컴포넌트
@@ -150,10 +151,16 @@ backend/app/
 │   │   ├── router.py       # 하위 라우터 집계
 │   │   ├── auth.py         # 자체 계정 /auth/login·refresh·logout·me; SSO는 도입 시 확장
 │   │   ├── health.py
+│   │   ├── notices.py      # 공개 공지 목록·상세·첨부 다운로드
+│   │   ├── banners.py      # 공개 배너(노출 기간 안의 활성 배너)
+│   │   ├── admin/          # /admin/* — 라우터 단위 require_admin (dashboard·users·notices·banners·editor)
 │   │   └── <domain>.py     # 도메인별 APIRouter (얇은 HTTP 계층)
-│   └── ...
+│   ├── errors.py           # ServiceError·StorageError → HTTP 상태 변환표(전역 핸들러)
+│   └── files.py            # 첨부 다운로드 응답(Content-Disposition), 업로드 크기 제한 읽기
 ├── core/
-│   └── security.py         # access JWT·refresh 불투명 토큰, 비밀번호 정책, now() (KST naive)
+│   ├── security.py         # access JWT·refresh 불투명 토큰, 비밀번호 정책, now() (KST naive)
+│   ├── storage.py          # UPLOAD_DIR 로컬 저장소 — 이미지 검증·재인코딩, 첨부 허용 목록, 키 해석 (§8)
+│   └── sanitize.py         # 리치 텍스트 본문 HTML 정화(nh3 허용 목록) (§8)
 ├── db/
 │   ├── base.py             # DeclarativeBase (Base)
 │   ├── engine.py           # 엔진 팩토리 (SQLite/PG 분기, KST connect_args)
@@ -161,11 +168,17 @@ backend/app/
 ├── models/
 │   ├── __init__.py         # 모든 모델 re-export (Alembic/메타데이터 등록용)
 │   ├── auth_session.py     # AuthSession(refresh 세션) + LoginThrottle(로그인 시도 제한) (§9)
+│   ├── notice.py           # Notice + NoticeAttachment
+│   ├── banner.py           # Banner
 │   └── <domain>.py
 ├── schemas/
 │   └── <domain>.py         # Pydantic BaseModel (요청/응답)
 └── services/
     ├── session_service.py  # refresh 세션 생성·회전·폐기 (§9)
+    ├── notice_service.py   # 공지 — 저장 직전 sanitize_html, 게시일·조회수, 첨부
+    ├── banner_service.py   # 배너 — 노출 기간 판정, 이미지 key 검증, 순서
+    ├── admin_service.py    # 대시보드 집계, 사용자 권한·활성(자기 강등·마지막 관리자 보호), 세션·스로틀 관리
+    ├── upload_service.py   # 공개 이미지 업로드(에디터·배너) 응답 조립
     ├── <domain>_service.py # 비즈니스 로직
     └── exceptions.py       # ServiceError 등 도메인 예외
 ```
@@ -380,6 +393,60 @@ class Order(Base):
 - 함수형 서비스(`def create_order(db, user, data)`)를 기본으로 한다.
 - 실패는 `ServiceError(code=...)` 같은 **도메인 예외**로 던지고, 라우터에서 HTTP로 변환.
 - N+1 방지: 조회 시 `selectinload` 등 명시적 로딩 옵션.
+- `ServiceError(code)`(와 저장소의 `StorageError`)는 `app/api/errors.py` 의 전역 핸들러가 `STATUS_BY_CODE` 표로 HTTP 상태를 정한다(`not_found` 404, `self_modification`·`last_admin`·`too_many_attachments` 409, `file_too_large` 413, 검증류 422, 표에 없으면 400). 응답 본문은 `{"detail": <메시지>, "code": <코드>}`. 인증 라우터(`auth.py`)는 401/429 와 쿠키·헤더가 얽혀 있어 직접 변환한다.
+
+### 기본 제공 테이블
+
+| 테이블 | 리비전 | 용도 |
+|--------|--------|------|
+| `app_meta` | `0001_initial` | 연결 확인용 샘플(`/health/db`) |
+| `users` | `0002_users` | 자체 계정 — `role`(`user`/`admin`), `is_active` |
+| `auth_sessions`, `login_throttles` | `0003_auth_sessions` | refresh 세션(해시만 저장), 계정별 로그인 실패 카운터 (§9) |
+| `notices` | `0004_notices_banners` | 공지 — `body_html`(저장 시 정화), `is_pinned`, `is_published`, `published_at`(처음 게시 때 1회), `view_count`, `author_id`(FK users, `SET NULL`) |
+| `notice_attachments` | 〃 | 공지 첨부 — `notice_id`(FK, `CASCADE`), `storage_key`(private 키), `original_name`, `content_type`, `size_bytes`. 공지당 최대 10개 |
+| `banners` | 〃 | 배너 — `image_key`(public/banners 키)·`image_width/height`(서버가 잰 값), `link_url`(http(s) 또는 `/` 내부 경로만), `alt_text`, `starts_at`/`ends_at`(노출 기간, NULL=무제한), `sort_order`, `is_active` |
+
+### 파일 업로드 · 저장소 · 본문 HTML 정화
+
+**저장소(`core/storage.py`)** — 업로드 파일은 `UPLOAD_DIR`(기본 `backend/uploads/`, 상대 경로는 backend 기준) 아래에 **서버가 만든 키**로만 저장한다. 사용자 파일명은 디스크 경로에 쓰지 않는다.
+
+| 키 | 내용 | 노출 |
+|----|------|------|
+| `public/editor/YYYY/MM/DD/<uuid>.<ext>` | 에디터 본문 이미지 | `/uploads/public/...` 정적 서빙 (`Cache-Control: public, max-age=31536000, immutable`) |
+| `public/banners/YYYY/MM/DD/<uuid>.<ext>` | 배너 이미지 | 〃 |
+| `private/attachments/YYYY/MM/DD/<uuid>.<ext>` | 공지 첨부(원본 파일명은 DB) | ⛔ 정적 서빙 금지 — 다운로드 API 로만 |
+
+- **이미지**: 매직 바이트 + Pillow 로 실제 이미지인지 확인(PNG·JPEG·WebP·GIF 만, SVG·BMP 등 거부, 4천만 픽셀 초과 거부) → EXIF 방향 반영 → 긴 변 `MAX_LONG_EDGE`(2000px) 초과 시 축소 → **메타데이터 없이 재인코딩**(EXIF·위치 정보 제거). **GIF 는 애니메이션 보존을 위해 재인코딩하지 않고 그대로** 저장한다(크기 상한은 업로드 용량 제한). 애니메이션 WebP 는 첫 프레임만 남는다. 상한 `MAX_IMAGE_UPLOAD_MB`(5).
+- **첨부**: 확장자 허용 목록(`pdf hwp hwpx doc docx xls xlsx ppt pptx txt csv zip png jpg jpeg`), `Content-Type` 은 클라이언트 값이 아니라 확장자 표로 정한다. 상한 `MAX_ATTACHMENT_UPLOAD_MB`(20). 다운로드는 `Content-Disposition: attachment; filename="<ASCII 대체>"; filename*=UTF-8''<RFC 5987>` + `nosniff` + `Cache-Control: private, no-store`.
+- **경로 탈출 방지**: 키는 정규식(`(public/(editor|banners)|private/attachments)/YYYY/MM/DD/<32hex>.<ext>`)에 맞아야 해석하고, 해석된 경로가 `UPLOAD_DIR` 안인지 다시 확인한다. 정적 마운트 루트가 `UPLOAD_DIR/public` 이라 `../` 로도 private 에 닿지 않는다.
+- **URL**: 응답의 공개 파일 URL = `PUBLIC_FILES_BASE_URL` + `/uploads/` + key. 비우면 루트 상대(`/uploads/public/...`) — 프론트엔드가 같은 오리진이거나 `/uploads` 를 백엔드로 프록시할 때. 첨부 `download_url` 도 같은 접두사를 쓴다. **이 템플릿(Next.js BFF)은 비워 둔다** — `frontend/next.config.ts` 의 rewrite 가 `/uploads/*` 와 공개 첨부 다운로드 경로를 같은 오리진에서 백엔드로 넘긴다(§13 "업로드 파일 · rewrite"). CDN 등 다른 오리진에서 공개 파일을 내보낼 때만 그 주소를 넣고 프론트 CSP `img-src` 도 연다.
+- **삭제**: 공지·첨부·배너 행을 지우면 커밋 후 파일도 지운다(배너 이미지는 다른 배너가 같은 키를 참조하지 않을 때만). 에디터 본문 이미지는 본문 HTML 이 참조하므로 자동으로 지우지 않는다 — 고아 파일 정리는 별도 배치 몫.
+- 업로드 크기는 핸들러가 상한+1 바이트까지만 읽어 판정한다. multipart 본문 자체는 그 전에 임시 파일로 받아지므로, 운영에서는 앞단 프록시(nginx `client_max_body_size` 등)에도 상한을 둔다.
+
+**본문 HTML 정화(`core/sanitize.py`, nh3)** — 리치 텍스트 본문은 **서비스 계층이 저장 직전에** `sanitize_html` 을 거친다(클라이언트를 믿지 않는다). 보기 화면에는 서버가 정화해 돌려준 HTML 만 넣는다.
+
+- 허용 태그: `p div br hr span h1–h6 strong b em i u s strike sub sup mark small ul ol li blockquote pre code a img table thead tbody tfoot tr th td caption colgroup col iframe`
+- 허용 속성: 모든 태그 `class`(값은 `align-left align-center align-right video` 만, 남는 값이 없으면 속성 제거) · `a`: `href target title` · `img`: `src alt width height title` · `iframe`: `src width height title allowfullscreen` · `div`: `data-youtube-video` · `td/th`: `colspan rowspan scope` · `ol`: `start` · `col`: `span`. `width/height` 는 1~4자리 정수만.
+- `iframe[src]` 는 `^https://www\.youtube(?:-nocookie)?\.com/embed/[A-Za-z0-9_-]{11}$` 만 — 그 외(다른 호스트, 쿼리 문자열)는 iframe 을 **내용째** 지운다. 남는 iframe 에는 `sandbox="allow-scripts allow-same-origin allow-popups allow-presentation"`·`loading="lazy"`·`referrerpolicy="strict-origin-when-cross-origin"` 를 강제한다.
+- URL 스킴 `http https mailto tel`(+상대 경로)만 — `javascript:`·`data:` 는 제거. `a` 에는 `rel="noopener noreferrer"` 강제.
+- `style`·`id`·`on*`·`srcdoc`·편집 전용 속성(`contenteditable`, `data-selected` 등)은 제거, `script`·`style` 은 내용째 제거.
+- 정화 후 글자·`src` 있는 `img`·`iframe` 이 하나도 없으면 빈 본문으로 422.
+- ⚠️ **에디터와 정화 허용 목록은 한 쌍이다.** 에디터에 서식·미디어를 추가하면 허용 목록과 `tests/test_sanitize.py` 를 같은 변경에서 고친다(허용 목록을 넓힐 땐 테스트를 먼저).
+
+### 공지·배너·관리자 API 요약
+
+| 경로 (`/api/v1` 기준) | 인증 | 설명 |
+|------|------|------|
+| `GET /notices?page&size&q` · `GET /notices/{id}` · `GET /notices/{id}/attachments/{aid}` | 없음 | 게시된 공지만(초안은 404). 고정 먼저 → 게시일 최신순. 상세 조회 시 `view_count` +1 |
+| `GET /banners` | 없음 | `is_active` + 노출 기간 안(KST 현재) — `sort_order`, `id` 순 |
+| `/admin/*` | `require_admin` | 라우터 단위 의존성 — 비로그인 401, 일반 사용자 403. 역할은 요청마다 DB 에서 읽어 강등 즉시 403 |
+| `GET /admin/dashboard` | 〃 | 사용자·세션·잠금·공지·배너 집계 + DB 상태 + Alembic 리비전 |
+| `GET /admin/users` · `PATCH /admin/users/{id}` · `DELETE /admin/users/{id}/sessions` | 〃 | 자기 강등·비활성화 금지, 마지막 활성 관리자 보호(409). 비활성화 시 세션 전부 폐기 |
+| `GET /admin/sessions` · `DELETE /admin/sessions/{id}` | 〃 | 살아 있는 세션 목록·강제 폐기 |
+| `GET /admin/login-throttles` · `DELETE /admin/login-throttles/{username}` | 〃 | 잠금·최근 24시간 실패 목록, 잠금 해제 |
+| `/admin/notices`(CRUD) · `/admin/notices/{id}/attachments` | 〃 | 저장 시 본문 정화, 첨부 업로드(multipart `file`)·다운로드·삭제 |
+| `/admin/banners`(CRUD) · `POST /admin/banners/image` · `PATCH /admin/banners/order` | 〃 | 이미지 먼저 업로드 → `image_key` 로 참조 |
+| `POST /admin/editor/images` | 〃 | multipart `file` → `{key, url, width, height}` |
 
 ---
 
@@ -493,6 +560,7 @@ CSP 는 `/docs`·`/redoc` 의 CDN·인라인 스크립트를 막으므로 백엔
   - `client`: `app.dependency_overrides[get_db]`를 적용한 기본 API 클라이언트.
   - `lifespan_client`: 기동·종료 훅과 기본 관리자 시드·경고를 검증하는 클라이언트.
 - skeleton 의 인증 회귀는 `tests/test_auth.py`(로그인·`/auth/me`)와 **`tests/test_auth_sessions.py`**(refresh 회전·재사용 감지 시 세션 폐기·동시 갱신 60초 유예·절대 수명 비연장·로그아웃 멱등·즉시 무효화·로그인 스로틀·비밀번호 정책)가 고정한다(§9).
+- 업로드·정화·공지·배너·관리자 회귀는 `tests/test_sanitize.py`(정화 허용 목록 표, §8)·`test_storage.py`(재인코딩·축소·EXIF 제거·GIF 원본 유지·허용 목록·경로 탈출)·`test_uploads_serving.py`(public 정적 서빙, private 미노출)·`test_notices.py`·`test_banners.py`·`test_admin.py` 가 고정한다. autouse 픽스처 `upload_dir` 이 `UPLOAD_DIR` 을 테스트별 `tmp_path` 로 돌려 저장소에 파일을 남기지 않고, `admin_headers`·`user_headers` 픽스처가 실제 로그인으로 Bearer 헤더를 만든다.
 
 ```python
 @pytest.fixture(autouse=True)
@@ -520,37 +588,57 @@ frontend/
 ├── tsconfig.json                # 경로 별칭 @/* → 프로젝트 루트
 ├── vitest.config.ts             # jsdom + @vitejs/plugin-react + @/* alias 재선언
 ├── vitest.setup.ts              # @testing-library/jest-dom 매처 등록
-├── proxy.ts                # ★ 인증 가드 + refresh 자동 갱신 (§14)
+├── proxy.ts                     # ★ 인증 가드 + refresh 자동 갱신 + 공개 경로 통과 (§14)
 ├── public/
 ├── app/                         # App Router — 이 디렉토리 구조가 곧 URL
 │   ├── layout.tsx               # 루트 레이아웃: html/body, globals.css import (Provider 없음)
-│   ├── globals.css              # @import "tailwindcss"; + @theme 토큰 (§15)
-│   ├── page.tsx                 # /        메인 (서버 컴포넌트)
+│   ├── globals.css              # @import "tailwindcss"; + @theme 토큰(+확장 토큰 기본값) + .rich-text/.editor (§15)
+│   ├── error.tsx · not-found.tsx # 렌더 오류 경계(클라) · 루트 404
 │   ├── login/page.tsx           # /login   서버 컴포넌트 + LoginForm(클라)
-│   ├── landing/page.tsx         # /landing 서버에서 health·health/db 직접 fetch
-│   └── my/page.tsx              # /my      내 정보 + LogoutButton(클라)
-├── components/                  # 'use client' 가 필요한 조각만
-│   ├── LoginForm.tsx            # useActionState 로 Server Action 호출
-│   ├── LoginForm.test.tsx       # 폼 → Action 전달값·오류 표시·대기 상태
-│   └── LogoutButton.tsx         # useTransition + 로그아웃 Server Action
+│   ├── (site)/                  # ★ 사용자 화면 — 라우트 그룹(URL 에 안 나온다), 상단 내비 레이아웃
+│   │   ├── layout.tsx           # 헤더(MainNav·AccountMenu — 사용자는 서버가 /auth/me 로)·푸터
+│   │   ├── page.tsx             # /             홈 — 배너 캐러셀(없으면 히어로)·서비스·최신 공지·내 계정 (공개)
+│   │   ├── notices/page.tsx     # /notices      목록(검색·페이지 = URL) (공개)
+│   │   ├── notices/[id]/page.tsx # /notices/<id> 상세 — RichContent·첨부 다운로드 (공개)
+│   │   ├── me/page.tsx          # /me           내 정보 + LogoutButton (로그인)
+│   │   ├── my/page.tsx          # /my → /me 영구 리다이렉트(이전 경로 호환)
+│   │   └── [...missing]/page.tsx · not-found.tsx  # 사용자 레이아웃 안의 404
+│   └── admin/                   # ★ 관리자 콘솔 — layout.tsx 가 관리자 가드(403) + 그룹 사이드바
+│       ├── page.tsx             # /admin        대시보드
+│       ├── notices/…            # 목록 · new · [id]/edit · [id]/attachments/[attachmentId]/route.ts(관리자 다운로드)
+│       ├── banners/…            # 목록 · new · [id]/edit
+│       ├── users · sessions · login-throttles · system
+│       └── [...rest]/page.tsx   # 없는 관리자 주소 → /admin
+├── components/
+│   ├── LoginForm.tsx · LogoutButton.tsx   # 인증 폼·버튼(클라)
+│   ├── layout/                  # MainNav·AccountMenu(클라) · AdminShell(서랍)·AdminSidebar(클라) · adminNav.ts(메뉴 정의) · PageHeader · SkipLink
+│   ├── admin/                   # 관리자 화면의 클라이언트 조각 — NoticeForm·AttachmentsPanel·BannerForm·BannerList·UsersTable·SessionsTable·ThrottlesTable·RefreshButton·useLeaveGuard
+│   ├── ui/                      # 공용 UI — styles·Icon·Chip·QueryState·Pagination(링크)·SearchForm(GET 폼)·AutoSubmitSelect·ConfirmDialog(클라)
+│   ├── editor/                  # 자체 리치 텍스트 에디터(클라) — RichTextEditor·Toolbar·MediaOverlay·ImageCropDialog·editorDom·imageCanvas
+│   ├── RichContent.tsx          # 서버가 정화한 본문 HTML 보기
+│   ├── BannerCarousel.tsx       # 홈 배너 캐러셀(클라, APG carousel) · HomeHero.tsx — 배너가 없을 때
+│   └── NoticeListReturn.tsx     # 상세 "목록으로" 가 보던 목록(검색·페이지)으로 돌아가게(sessionStorage)
 └── lib/
-    ├── actions/auth.ts          # 'use server' — loginAction/logoutAction
-    ├── session.ts               # 두 세션 쿠키 read/set/clear + getSessionUser (server-only)
+    ├── actions/                 # 'use server' — auth · notices · banners · admin · editor (+ result.ts: 결과 타입·id 검증, 액션 파일 아님)
+    ├── server/                  # ★ server-only — fastapi.ts(fetch 래퍼) · notices·banners·admin(도메인 조회·변경) · load.ts(조회 도우미·관리자 가드)
+    ├── session.ts               # 두 세션 쿠키 read/set/clear + getSessionUser·getOptionalUser (server-only)
     ├── session-cookie.ts        # 쿠키 이름·속성·maxAge 헬퍼 — ⛔ 의존성 0 (proxy·Vitest 공용, §14)
-    ├── session-cookie.test.ts   # __Host- 프리픽스·maxAge 계산의 회귀 테스트
-    ├── fastapi-error.ts         # FastapiError·kind 분류·사용자 문구 — 순수 모듈 (server-only 아님)
-    ├── fastapi-error.test.ts    # 오류 분류·문구의 회귀 테스트
+    ├── public-paths.ts          # isPublicPath — 로그인 없이 볼 수 있는 화면 허용 목록 (proxy 공용, 의존성 0)
+    ├── fastapi-error.ts         # FastapiError(kind·status·detail·code·validation)·사용자 문구 — 순수 모듈
+    ├── api-error.ts             # 관리자 작업 오류 → 한국어(도메인 code·413·422 배열) — 순수, 액션이 쓴다
     ├── safe-redirect.ts         # next 파라미터 검증 (오픈 리다이렉트 방지, §14)
-    ├── safe-redirect.test.ts    # 위 검증의 회귀 테스트
-    ├── server/fastapi.ts        # ★ 서버 전용 fetch 래퍼 — Bearer 주입 (에러 정규화는 fastapi-error 를 re-export)
-    └── types.ts                 # User/UserRole/TokenResponse/DbHealth/Health
+    ├── listParams.ts            # 목록 URL 파라미터(page·q·id) 해석·링크 생성
+    ├── bannerForm.ts · linkUrl.ts · uploadRules.ts · format.ts · site.ts   # 폼 검증·규칙(백엔드와 같은 값)·KST 문자열 표시
+    ├── editor/                  # 에디터 순수 로직(richText·imageTransform·mediaHtml) + upload.ts(업로드 계약 타입)
+    ├── types.ts                 # 백엔드 스키마와 동기화되는 타입(User·Page·Notice*·Banner*·Dashboard·AdminUser…)
+    └── *.test.ts                # 순수 모듈 테스트는 대상 옆에
 ```
 
 - **`app/` 은 서버 컴포넌트가 기본**이다. `'use client'` 는 이벤트 핸들러·폼 상태가 필요한 말단 컴포넌트에만 붙인다.
 - `'use client'` 컴포넌트에는 **토큰·세션 원본을 props 로 내려보내지 않는다.** 필요한 최소 표시값(사용자명 등)만 넘긴다.
 - 테스트는 대상 파일 옆에 `*.test.ts(x)` 로 둔다(예: `lib/safe-redirect.test.ts`). 아래 **프론트엔드 테스트** 항목 참조.
 
-백엔드 스키마와 동기화되는 타입은 **`lib/types.ts` 한 곳**에 모은다(`User`·`UserRole`·`TokenResponse`·`DbHealth`·`Health`). 유니온은 리터럴(`'active' | 'closed'`).
+백엔드 스키마와 동기화되는 타입은 **`lib/types.ts` 한 곳**에 모은다(`User`·`TokenResponse`·`Page<T>`·`Notice*`·`Banner*`·`Dashboard`·`AdminUser` 등 — 서버·클라이언트 양쪽이 import 하므로 server-only 가 아니다). 유니온은 리터럴(`'active' | 'closed'`).
 
 `lib/server/fastapi.ts` (★ FastAPI 로 나가는 **유일한** 출구 — 서버 전용):
 ```ts
@@ -614,6 +702,7 @@ export async function fastapiFetch<T>({ path, method = "GET", body, token }: Fas
 export function fastapiErrorMessage(error: unknown): string
 ```
 
+- 위는 요약이다. 실제 래퍼는 `query`(빈 값 제외 쿼리)·`timeoutMs`(업로드처럼 긴 호출)·**`FormData` 본문(multipart — Content-Type 을 지정하지 않는다)** 을 받고, 오류 응답의 `{"detail","code"}` 를 `FastapiError.code` 로, 422 배열 detail 의 첫 메시지를 `.validation` 으로 분해한다(`parseErrorBody`). 파일을 중계할 때는 응답을 해석하지 않는 `fastapiStream()` 을 쓴다(관리자 첨부 다운로드 Route Handler).
 - **토큰은 래퍼가 쿠키에서 읽지 않고 호출부가 `token` 으로 넘긴다.** `lib/session.ts` 가 이 모듈을 import 하므로 반대 방향 의존은 순환이 된다. 보호 API 호출은 `getSessionToken()` 결과를 그대로 넘긴다.
 - 호출부는 `error.kind` 로 분기한다(⛔ 상태코드 하드코딩·문구 하드코딩 금지).
 
@@ -748,34 +837,32 @@ export async function logoutAction(): Promise<void> {
     }
   }
   await clearSessionTokens()
-  redirect("/login")
+  redirect("/")   // 첫 화면은 공개다 — 로그아웃 뒤에도 홈을 그대로 볼 수 있다
 }
 ```
 
-`app/landing/page.tsx` (서버 컴포넌트에서 직접 fetch — 훅도 로딩 상태도 필요 없다):
+`app/admin/system/page.tsx` (서버 컴포넌트에서 직접 fetch — 훅도 로딩 상태도 필요 없다):
 ```tsx
 import { Suspense } from "react"
-import { fastapiFetch } from "@/lib/server/fastapi"
-import type { Health } from "@/lib/types"
+import { getHealth } from "@/lib/server/admin"   // server-only 도메인 모듈 → fastapiFetch
 
-// StatusBadge 는 같은 파일의 표시용 컴포넌트다(클라이언트 컴포넌트가 아니다).
+// StatusRow 는 같은 파일의 표시용 컴포넌트다(클라이언트 컴포넌트가 아니다).
 // 아래 함수는 서버에서 실행된다 — 브라우저는 이 요청을 보지 못하고, 토큰도 넘어가지 않는다.
-async function ApiStatus() {
+async function ApiRow() {
   let ok = false
   try {
-    const health = await fastapiFetch<Health>({ path: "/health" })   // 공개 API 라 token 없음
-    ok = health.status === "ok"
+    ok = (await getHealth()).status === "ok"   // 공개 API 라 token 없음
   } catch {
     // 백엔드 미기동·5xx 는 화면에서 "연결 안 됨" 으로만 알린다.
   }
-  return <StatusBadge label="백엔드 API" tone={ok ? "ok" : "error"} detail="GET /api/v1/health" />
+  return <StatusRow label="백엔드 API" detail="GET /api/v1/health" state={ok ? "ok" : "error"} />
 }
 
-export default function LandingPage() {
-  // 로딩 표시는 <Suspense> 로 만든다 — 껍데기부터 스트리밍되고 응답이 오면 배지만 교체된다.
+export default function SystemPage() {
+  // 로딩 표시는 <Suspense> 로 만든다 — 껍데기부터 스트리밍되고 응답이 오면 행만 교체된다.
   return (
-    <Suspense fallback={<StatusBadge label="백엔드 API" tone="loading" detail="GET /api/v1/health" />}>
-      <ApiStatus />
+    <Suspense fallback={<StatusRow label="백엔드 API" detail="GET /api/v1/health" state="loading" />}>
+      <ApiRow />
     </Suspense>
   )
 }
@@ -794,23 +881,49 @@ export default function LandingPage() {
 
 | 헤더 | 값 | 이유 |
 |------|-----|------|
-| `Content-Security-Policy` | `default-src 'self'; …; object-src 'none'; frame-ancestors 'none'` 등 | XSS·클릭재킹의 기본 방어선 |
+| `Content-Security-Policy` | `default-src 'self'; img-src 'self' data: blob: https://img.youtube.com; connect-src 'self'; frame-src https://www.youtube-nocookie.com https://www.youtube.com; …; object-src 'none'; frame-ancestors 'none'` 등 | XSS·클릭재킹의 기본 방어선. 본문 유튜브 임베드는 **정확한 두 호스트만** 연다(와일드카드 금지 — 백엔드 정화기도 같은 두 호스트의 `/embed/<id>` 만 남긴다). 에디터의 업로드 전 미리보기는 `blob:`, 자르기·변환은 canvas(CSP 대상 아님), "다시 자르기" 의 이미지 fetch 는 같은 오리진 `/uploads` 라 `connect-src 'self'` 로 충분하다 |
 | `X-Frame-Options` | `DENY` | `frame-ancestors` 를 모르는 구형 브라우저 백업 |
 | `X-Content-Type-Options` | `nosniff` | 업로드 파일이 HTML 로 스니핑되어 실행되는 XSS 차단 |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` | `/login?next=…` 같은 내부 경로·쿼리가 Referer 로 새는 것 방지 |
 | `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` | XSS 가 성공해도 고권한 브라우저 API 접근 차단 |
 | `Strict-Transport-Security` | production 만 `max-age=31536000; includeSubDomains` | ⚠️ localhost 에 붙으면 브라우저가 도메인 단위로 기억해 http 개발 환경이 잠긴다 — dev 에서는 내보내지 않는다 |
 
+### 업로드 파일 · rewrite · Server Action 본문 상한 (`next.config.ts`)
+
+백엔드는 공개 파일을 `/uploads/public/...` 로, 게시된 공지의 첨부를 `/api/v1/notices/<id>/attachments/<aid>` 로 내보내고, API 응답의 URL 은 **루트 상대**다(`PUBLIC_FILES_BASE_URL` 비움, §8). Next 는 이 두 갈래만 **같은 오리진에서 백엔드로 rewrite** 한다 — 브라우저는 여전히 백엔드 주소를 모른다.
+
+```ts
+async rewrites() {
+  return {
+    beforeFiles: [   // ★ beforeFiles — 사용자 화면의 404 catch-all((site)/[...missing])보다 먼저 적용돼야 한다
+      { source: "/uploads/:path*", destination: `${fastapiUrl}/uploads/:path*` },
+      { source: "/api/v1/notices/:id(\\d+)/attachments/:aid(\\d+)", destination: `${fastapiUrl}/api/v1/notices/:id/attachments/:aid` },
+    ],
+    afterFiles: [],
+    fallback: [],
+  }
+}
+```
+
+- ⚠️ `rewrites()`·`headers()` 는 **빌드 시점**에 평가되어 `.next/routes-manifest.json` 에 박힌다. `frontend/.env` 는 `next build` 때도 읽히므로 보통은 문제없지만, 한 번 빌드한 산출물을 여러 환경에 배포한다면 `FASTAPI_URL` 을 빌드 환경에도 넣고, 바꾸면 다시 빌드한다.
+- `proxy.ts` matcher 는 `uploads/`·`api/v1/notices/` 를 제외한다(세션과 무관한 파일이라 refresh 왕복을 태우지 않는다). 임시저장 공지의 첨부·`private/` 파일은 백엔드가 404 로 막는다.
+- **관리자 첨부 다운로드**(임시저장 포함)는 Bearer 가 필요해 rewrite 로 넘길 수 없다 → Route Handler `app/admin/notices/[id]/attachments/[attachmentId]/route.ts` 가 세션 쿠키의 access 토큰으로 `GET /admin/notices/{id}/attachments/{aid}` 를 부르고 본문을 **스트리밍**으로 넘긴다(`Content-Type`·`Content-Disposition` 그대로, `no-store`·`nosniff`). 이 템플릿의 유일한 Route Handler 다(스킬의 "`app/api/**` 남발 금지" 원칙의 근거 있는 예외 — 쿠키 세션을 Bearer 로 바꿔 파일을 중계하는 일은 Server Action 이 못 한다).
+- **업로드는 전부 Server Action** 이다 — 에디터 이미지(`uploadEditorImageAction` → `POST /admin/editor/images`, 에디터의 `uploadImage` prop), 배너 이미지(`uploadBannerImageAction`), 공지 첨부(`uploadAttachmentAction`, 파일마다 순서대로). 클라이언트가 `FormData{file}` 로 액션을 부르면 액션이 같은 형태의 multipart 로 백엔드에 보낸다. 본문 상한은 `experimental.serverActions.bodySizeLimit = "25mb"`(첨부 20MB + 여유)이고, proxy 의 본문 복제 상한 `experimental.proxyClientMaxBodySize`(기본 10MB)도 같은 값이다 — 작으면 `/admin/**` 에서 올린 큰 파일이 proxy 단계에서 잘린다. 백엔드 `MAX_ATTACHMENT_UPLOAD_MB` 를 올리면 함께 올린다. ⚠️ Server Action 은 업로드 진행률을 주지 않는다(파일별 "올리는 중" 상태만).
+
 ### 프론트엔드 테스트 (vitest)
 
 러너는 **Vitest `5.0`**, 실행은 `pnpm test`(watch 는 `pnpm test:watch`). 설정은 `vitest.config.ts` 에 둔다 — `@vitejs/plugin-react` + `environment: "jsdom"` + `setupFiles: "./vitest.setup.ts"`(jest-dom 매처), 대상은 `{app,components,lib}/**/*.test.{ts,tsx}`. **경로 별칭 `@/*` 는 Vitest 가 tsconfig 에서 읽어오지 않으므로 `resolve.alias` 에 다시 적는다.**
 
-`tsc --noEmit` 과 `eslint` 는 **런타임 동작을 잡지 못한다.** 스켈레톤이 실제로 고정하는 회귀는 네 개다:
+`tsc --noEmit` 과 `eslint` 는 **런타임 동작을 잡지 못한다.** 인증의 핵심 회귀는 아래 1~4번이고, 사용자 화면·관리자 콘솔·에디터의 회귀가 5~7번이다:
 
 1. **`lib/safe-redirect.test.ts`** — `https://evil.example`·`//evil.example`·`/\evil`·`javascript:`·백슬래시·공백/제어문자·상대경로·비문자열은 모두 `/` 로 떨어지고, `/my?tab=profile&sort=desc` 같은 내부 경로는 **query·hash 까지 보존**된다. `/login` 자신으로는 되돌리지 않는다(로그인 루프 방지). (§14 오픈 리다이렉트)
 2. **`components/LoginForm.test.tsx`** — 폼이 `username`·`password`·`next` 를 **FormData 로 Server Action 에 넘기고**, Action 이 돌려준 오류 문구를 `role="alert"` 로 보여주며, 제출 중에는 버튼이 잠긴다. Server Action 자체는 `vi.mock` 으로 대체한다 — `lib/actions/auth` 는 `server-only` 를 끌고 와 러너에서 **로드조차 되지 않는다**.
 3. **`lib/session-cookie.test.ts`** — `__Host-` 프리픽스 적용 조건과 access 쿠키 maxAge 계산(`expires_in − 60초`, 하한 60초), 두 쿠키 공통 속성. (§14 세션 쿠키 속성)
 4. **`lib/fastapi-error.test.ts`** — 상태코드→`kind` 분류(429 는 `throttled`)와 원인별 사용자 문구. `lib/server/fastapi.ts` 는 `server-only` 라 러너가 로드하지 못하므로 순수 로직을 `lib/fastapi-error.ts` 로 분리해 고정한다.
+
+5. **에디터** — 순수 로직 `lib/editor/{richText,imageTransform,mediaHtml}.test.ts`(붙여넣기 정리·빈 본문 판정·크기 계산·자르기 영역·유튜브 ID·직렬화)와 컴포넌트 `components/editor/RichTextEditor.test.tsx`(jsdom 에 없는 `execCommand`·canvas 는 테스트 안에서 흉내 낸다), `components/RichContent.test.tsx`.
+6. **클라이언트 조각** — `components/admin/NoticeForm.test.tsx`(화면 검증 → 액션 미호출, FormData(`body_html`·체크박스 `on`), 저장 결과·변경 표시, 이탈 확인 다이얼로그, `leavingHref`), `AttachmentsPanel.test.tsx`(사전 검사·순차 업로드·관리자 다운로드 링크·삭제 확인), `BannerForm.test.tsx`, `UsersTable.test.tsx`(확인 후 액션 인자·거부 문구, 잠금 해제), `components/layout/AdminSidebar.test.tsx`(현재 메뉴 `aria-current`·잠김 배지·활성 경로 판정), `components/BannerCarousel.test.tsx`. Server Action 모듈은 `vi.mock` 으로 끊고 `next/navigation` 은 필요한 훅만 mock 한다.
+7. **순수 규칙** — `lib/api-error.test.ts`(도메인 code·413·422 배열·네트워크), `lib/listParams.test.ts`, `lib/public-paths.test.ts`(공개 경로 허용 목록이 넓어지지 않게), `lib/bannerForm.test.ts`.
 
 > **1·2번은 짝이다.** proxy 가 `next` 에 담는 값은 pathname+search 이고, 폼은 그 값을 hidden 필드로 실어 보내며, `safeRedirect()` 가 그것을 그대로 되살린다. 한쪽만 검증하면 **복귀할 때 query 를 버리는데도 테스트는 통과한다.**
 
@@ -827,13 +940,14 @@ export default function LandingPage() {
 ```
 
 - **인증 가드는 `proxy.ts`**(Next 16 에서 `middleware` 파일 규약이 `proxy` 로 이름이 바뀌었다 — export 함수도 `proxy`, **Node.js 런타임** 고정이며 `runtime` 설정은 허용되지 않는다): matcher 가 제외하지 않은 모든 요청에서,
+  0. **공개 화면**(`lib/public-paths.ts` 의 `isPublicPath` — `/`·`/notices`·`/notices/<id>`)은 **로그인 없이 통과**한다. 그래도 matcher 에서 빼지 않는다 — access 쿠키가 만료되고 refresh 쿠키만 남은 사용자가 공개 화면에 오면 아래 2번처럼 세션을 이어 줘야 헤더가 "로그인" 으로 잘못 보이지 않는다. 공개 화면에서는 갱신에 실패해도 리다이렉트하지 않는다(401 이면 쿠키만 파기). 공개 목록은 **허용 목록**이라 새 화면은 기본이 보호다.
   1. **access 쿠키가 있으면 존재만 보고 통과한다** — 서명 검증도, 만료 확인도 하지 않는다(요청마다 도는 코드이고, `SECRET_KEY` 는 백엔드 것이다).
   2. **access 쿠키가 없고 refresh 쿠키만 있으면** 백엔드 `POST /api/v1/auth/refresh` 를 직접 호출한다(**자동 세션 갱신**, 타임아웃 5초). 성공하면 회전된 새 쌍으로 두 쿠키를 갈아끼우고 원래 요청을 그대로 통과시킨다 — 사용자는 재로그인 없이 세션이 이어진다. **401 이면** 회복 불가능한 refresh 이므로 두 쿠키를 파기하고 `/login?next=` 로 보낸다. **네트워크 오류·5xx 는** 토큰 판정이 아니라 백엔드 문제다 — 쿠키는 보존하고 리다이렉트만 한다(복구 후 다시 오면 여기서 갱신된다).
   3. 둘 다 없으면 `/login?next=<원래경로>` 로 리다이렉트한다. `next` 에는 **pathname + search** 를 담는다(복귀 시 query 를 잃지 않게 §13 테스트).
 - **access 쿠키 maxAge 는 `expires_in − 60초`** (`accessCookieMaxAge`) — 쿠키가 토큰보다 먼저 죽어야 proxy 가 만료를 "쿠키 없음 → refresh" 로 **선제** 감지한다. refresh 는 access 만료 주기(기본 15분)에 한 번꼴이라 "요청마다 백엔드에 묻는" 비용 문제가 없다.
 - **로그인은 Server Action**: 폼 제출 → `POST /api/v1/auth/login`(JSON `{username, password}`) → 응답의 access·refresh 를 **httpOnly 쿠키 2개로 설정**(`setSessionTokens`) → `redirect(safeRedirect(next))` 로 원래 위치(없으면 `/`) 복귀. 429(시도 제한)는 자격증명 오류와 구분된 문구로 보여준다.
 - **사용자 정보는 이동한 화면의 서버 컴포넌트가 `getSessionUser("<현재경로>")`(→ `GET /api/v1/auth/me`)로 직접 읽는다.** 서버 컴포넌트는 자기 URL 을 모르므로 복귀 경로를 인자로 넘긴다. 로그인 액션에서 미리 불러 클라이언트로 넘기지 않는다 — 중복 요청이 되고, 실패 시 리다이렉트까지 건너뛰어진다.
-- **로그아웃도 Server Action**: 백엔드 `POST /auth/logout` 으로 refresh 토큰을 **폐기(revoke)** 한 뒤 두 쿠키를 지우고 `/login` 으로 리다이렉트한다. 백엔드 호출은 **best-effort** 다 — 로그아웃의 본체는 쿠키 삭제이고, `/auth/logout` 은 멱등(204·인증 불요)이라 실패·재시도 모두 안전하다. 폐기된 세션의 access 토큰은 sid 검사로 **즉시 401** 이 된다(§9).
+- **로그아웃도 Server Action**: 백엔드 `POST /auth/logout` 으로 refresh 토큰을 **폐기(revoke)** 한 뒤 두 쿠키를 지우고 홈(`/`, 공개)으로 리다이렉트한다. 백엔드 호출은 **best-effort** 다 — 로그아웃의 본체는 쿠키 삭제이고, `/auth/logout` 은 멱등(204·인증 불요)이라 실패·재시도 모두 안전하다. 폐기된 세션의 access 토큰은 sid 검사로 **즉시 401** 이 된다(§9).
 - **401 처리**: proxy 는 만료를 모르므로 **통과했는데 FastAPI 가 401 을 주는 구간이 반드시 생긴다**(자동 refresh 가 대부분 걸러 주지만 `SECRET_KEY` 교체·계정 비활성화·세션 폐기는 남는다). 그때 `getSessionUser()` 가 `FastapiError.kind === "unauthorized"` 를 보고 `/login?next=<현재경로>` 로 보낸다 — 만료 세션 처리는 이 함수 한 곳이 담당한다. 그 밖의 실패(백엔드 미기동·5xx)는 세션 문제가 아니므로 리다이렉트하지 않고 `null` 을 돌려준다 — 화면이 "로그인 만료"와 "백엔드 다운"을 구분해 보여줄 수 있어야 한다.
 - **SSO 도입 시 확장**: 로그인 페이지에서 백엔드 authorize URL 로 보내고, 콜백을 받을 라우트(`app/auth/callback/`)에서 토큰을 **쿠키로 옮긴 뒤** 리다이렉트한다. 토큰을 클라이언트 코드가 만지지 않는 원칙은 그대로다(§9).
 
@@ -893,13 +1007,14 @@ export async function proxy(request: NextRequest) {
   // access 쿠키가 있으면 존재만 보고 통과 — 서명·만료 검증은 FastAPI 몫이다.
   if (request.cookies.has(SESSION_COOKIE)) return NextResponse.next()
 
+  const isPublic = isPublicPath(request.nextUrl.pathname)   // / · /notices · /notices/<id> — lib/public-paths.ts
   const refreshToken = request.cookies.get(REFRESH_COOKIE)?.value
-  if (!refreshToken) return redirectToLogin(request)   // /login?next=<pathname+search> ★ query 까지 보존
+  if (!refreshToken) return isPublic ? NextResponse.next() : redirectToLogin(request)   // /login?next=<pathname+search>
 
   // access 는 죽고 refresh 만 남은 상태 — 백엔드에 회전(rotation)을 요청해 세션을 잇는다.
   // fetch(`${FASTAPI_URL}/api/v1/auth/refresh`, { …, signal: AbortSignal.timeout(5_000) })
-  //   - 네트워크 오류·타임아웃·5xx → 백엔드 문제. 쿠키는 보존하고 로그인 화면으로만 보낸다.
-  //   - 401 → 회복 불가(만료·폐기·재사용 감지). 두 쿠키를 maxAge 0 으로 파기하고 리다이렉트.
+  //   - 네트워크 오류·타임아웃·5xx → 백엔드 문제. 쿠키는 보존하고 (보호 화면만) 로그인 화면으로 보낸다.
+  //   - 401 → 회복 불가(만료·폐기·재사용 감지). 두 쿠키를 maxAge 0 으로 파기하고 (보호 화면만) 리다이렉트.
   //   - 성공 → 회전된 새 쌍으로 두 쿠키 교체 후 NextResponse.next() 로 원래 요청 통과.
   //     (next() 의 응답 쿠키는 같은 요청의 cookies() 에도 반영되어(13.0.1+)
   //      이어지는 서버 컴포넌트가 새 access 토큰을 바로 읽는다)
@@ -908,8 +1023,10 @@ export async function proxy(request: NextRequest) {
 export const config = {
   // ⚠️ /login·정적 자산을 빼지 않으면 무한 리다이렉트다(/login 요청 → 쿠키 없음 → /login → …).
   //    login = 로그인 화면 자신, _next/static|image = 빌드 산출물·이미지 최적화,
+  //    uploads/·api/v1/notices/ = 백엔드로 rewrite 되는 공개 파일·첨부(§13),
   //    `.*\.` = favicon.ico 처럼 확장자가 있는 public 정적 파일.
-  matcher: ["/((?!login(?:/|$)|_next/|.*\\.(?:ico|png|jpg|jpeg|gif|svg|webp|avif|css|js|map|txt|xml|json|webmanifest|woff2?)$).*)"],
+  //    공개 **화면**은 빼지 않는다 — 위 isPublicPath 가 통과시키면서 만료 세션을 이어 준다.
+  matcher: ["/((?!login(?:/|$)|_next/|uploads/|api/v1/notices/|.*\\.(?:ico|png|jpg|jpeg|gif|svg|webp|avif|css|js|map|txt|xml|json|webmanifest|woff2?)$).*)"],
 }
 ```
 
@@ -966,6 +1083,33 @@ export default function LoginForm({ next }: { next: string }) {
 
 입력값을 `useState` 로 붙들지 않는다(비제어 입력 + `name`). 브라우저가 `FormData` 를 그대로 Server Action 에 보내므로 JS 가 아직 로드되지 않아도 폼이 제출된다. 로그아웃은 폼이 없으므로 `LogoutButton` 이 `useTransition()` 으로 `startTransition(logoutAction)` 을 부른다.
 
+### 화면 구성 · 레이아웃 · 관리자 가드
+
+라우트는 `app/` 디렉터리가 곧 URL 이다. 사용자 화면은 라우트 그룹 `app/(site)/`(상단 내비 레이아웃), 관리자 콘솔은 `app/admin/`(그룹 사이드바 레이아웃)이고, 로그인은 둘 다의 바깥(`app/login/`)이다.
+
+| 경로 | 화면 | 접근 |
+|------|------|------|
+| `/` | 홈 — 배너 캐러셀(`GET /banners`, 없으면 기본 히어로) · 주요 서비스(자리표시) · 최신 공지 5건 · 내 계정 | 공개 |
+| `/notices` · `/notices/<id>` | 공지 목록(고정 우선·제목 검색·페이지, `page`·`q` 는 URL) · 상세(본문 `RichContent`, 첨부 `download_url`) | 공개 |
+| `/login` | 로그인 — 성공 시 `?next=` 로 복귀 | 공개 |
+| `/me` (`/my` → 영구 리다이렉트) | 내 정보 · 로그아웃 | 로그인 |
+| `/admin` | 대시보드 — KPI(사용자·세션·잠금·공지·배너·DB/Alembic) · 최근 활성 세션 5건(강제 종료) · 잠긴 계정(잠금 해제) | admin |
+| `/admin/notices` · `/new` · `/<id>/edit` | 공지 목록(임시저장 포함) · 작성/수정(`RichTextEditor` + 첨부 패널 — 첫 저장 뒤 수정 화면으로 이동) | admin |
+| `/admin/banners` · `/new` · `/<id>/edit` | 배너 목록(활성 토글 = PUT 전체 본문, 위/아래 이동 = `PATCH /order`) · 작성/수정(이미지 업로드·미리보기, 대체 텍스트 필수) | admin |
+| `/admin/users` · `/admin/sessions` · `/admin/login-throttles` | 사용자(검색·역할 필터·권한/활성 변경·세션 모두 종료) · 세션(`?user_id=` 필터·강제 종료) · 로그인 잠금(해제) | admin |
+| `/admin/system` | 헬스 체크(`/health`, `/health/db`) + DB 상태·Alembic 리비전 (이전 템플릿의 `/landing` 을 옮겼다) | admin |
+
+- **사용자 레이아웃** `app/(site)/layout.tsx`(디자인 A — 상단 내비 포털): 로고·홈·공지사항·자리표시 메뉴(`MainNav` — 현재 메뉴 판정만 클라이언트 `usePathname`), 오른쪽은 비로그인 "로그인" / 로그인 계정 메뉴(`AccountMenu` — 내 정보·로그아웃) + **role=admin 에게만** "관리자 콘솔". 사용자는 레이아웃(서버)이 `getOptionalUser()`(→ `/auth/me`, React `cache()` 로 요청당 한 번, 리다이렉트하지 않음)로 읽어 **표시값만** props 로 내려준다.
+- **관리자 레이아웃** `app/admin/layout.tsx`(디자인 A — 그룹형 사이드바): 메뉴 정의는 `components/layout/adminNav.ts`(개요·콘텐츠·회원·보안·시스템). 현재 메뉴는 `aria-current="page"` + 강조, "로그인 잠금" 에 잠긴 계정 수 배지(레이아웃이 대시보드 집계로 읽는다), 하단 "사용자 화면으로"·현재 사용자. 1024px 미만은 상단 "메뉴" 버튼이 서랍으로 연다(`AdminShell` — 클라이언트인 이유는 서랍 상태뿐이고 본문은 서버 컴포넌트 그대로다).
+- **관리자 가드**는 세 겹이다. ① `proxy.ts` — 비로그인은 요청 단계에서 `/login?next=<원래 경로>`. ② `app/admin/layout.tsx` 의 `checkAdmin()`(`lib/server/load.ts`) — 무효 토큰은 `/login?next=/admin`, **role≠admin 이면 403 화면**(콘솔 틀을 그리지 않는다), 백엔드 장애는 오류 화면. ③ **권한 경계는 백엔드** `require_admin`(비로그인 401, 일반 사용자 403) — 레이아웃은 클라이언트 이동 때 다시 렌더되지 않을 수 있으므로, 각 화면의 조회는 `loadForPage()` 로 401 → 로그인, 그 밖의 실패(403 포함) → 문구로 처리한다.
+- **서버 상태 규칙**: 조회는 서버 컴포넌트(`lib/server/<domain>.ts`, 목록 상태는 URL `searchParams`), 변경은 Server Action(`lib/actions/<domain>.ts`) 후 `revalidatePath`(공지·배너는 공개 화면·대시보드와 엮여 `"/"` 레이아웃 전체, 사용자·세션·잠금은 `"/admin"` 레이아웃) — 액션 응답에 현재 화면의 새 데이터가 실려 와 목록이 갱신된다. 클라이언트 쿼리 캐시는 없다. 배너 활성 토글·순서만 `useOptimistic` 으로 먼저 반영한다. 파괴적 작업(삭제·강제 종료·비활성화·권한 변경)은 `ConfirmDialog` 로 확인한다. "새로고침" 은 `router.refresh()`.
+- **폼**: 공지·배너 저장은 `<form action={formAction}>` + `useActionState`. 화면 검증은 `onSubmit` 에서 하고 실패하면 `preventDefault` 로 액션을 부르지 않는다(액션도 같은 규칙으로 다시 검증 — `lib/bannerForm.ts` 공용). 처음 저장한 공지는 액션이 `redirect("/admin/notices/<id>/edit?created=1")` 해 첨부 패널을 연다. 에디터 본문은 hidden `body_html` 로 함께 간다.
+- **에디터**는 브라우저 전용이다(`contentEditable`·Selection·`<template>` 파싱) — `NoticeForm` 이 `next/dynamic(..., { ssr: false })` 로 불러 서버 렌더에서 제외하고, 에디터 코드는 별도 청크가 된다. 이미지 업로드는 `uploadImage` prop 으로 받은 함수만 부르며, 그 실체는 Server Action `uploadEditorImageAction`(→ `POST /admin/editor/images`)이다. 에디터 계약대로 reject 하지 않고 실패는 `{ error }` 문구다.
+- **저장하지 않은 변경 이탈 확인**: App Router 에는 `useBlocker` 같은 내비게이션 차단 API 가 없다. `components/admin/useLeaveGuard.ts` 가 변경이 있을 때만 ① `beforeunload`(새로고침·닫기·외부 이동) ② 화면 안 **링크 클릭**을 `window` 캡처 단계에서 가로채 확인 다이얼로그를 띄우고 "나가기" 면 `router.push` 로 이어 간다(새 탭·`download`·외부·같은 화면 해시는 통과). ⚠️ 브라우저 뒤로/앞으로(popstate)와 코드의 `router.push` 는 막지 못한다 — 저장 버튼 옆의 "저장하지 않은 변경 사항이 있습니다" 표시가 보완한다.
+- **조회수**: 공지 상세는 서버가 조회할 때마다 `view_count` 를 올린다 — 목록·홈의 상세 링크는 `prefetch={false}` 로 미리 가져오기를 끈다.
+- **오류 문구**: Server Action 은 실패를 던지지 않고 `lib/api-error.ts` 의 `apiErrorMessage()`(도메인 `code` — `self_modification`·`last_admin`·`too_many_attachments`·`unsupported_file_type`… · 413 · 422 배열 · 401/403/404/5xx · 네트워크)로 만든 문구를 상태로 돌려준다. 업로드 전 사전 검사(`lib/uploadRules.ts`·`editorImageProblem`·`lib/linkUrl.ts`)는 백엔드 허용 목록·규칙과 같은 값이다 — 백엔드 설정을 바꾸면 함께 고친다.
+- **시각**: 서버 값은 KST naive 문자열이다. `lib/format.ts` 는 `Date` 로 재해석하지 않고 문자열로 자른다. 배너 기간 입력은 `datetime-local` → `YYYY-MM-DDTHH:mm:00`.
+
 ---
 
 ## 15. 스타일 — Tailwind CSS v4
@@ -974,7 +1118,8 @@ export default function LoginForm({ next }: { next: string }) {
 - **연결 방식은 PostCSS 플러그인 `@tailwindcss/postcss`** — `frontend/postcss.config.mjs` 에 선언한다.
   ⛔ `@tailwindcss/vite` 는 쓸 수 없다. Next 는 Vite 가 아니라 자체 번들러(Turbopack/webpack)를 쓴다.
 - **진입 CSS 는 `app/globals.css`** 하나뿐이고, **`app/layout.tsx` 에서 import** 한다. 페이지별로 전역 CSS 를 추가로 import 하지 않는다.
-- 공통 컴포넌트 클래스는 `@layer components`.
+- 공통 컴포넌트 클래스는 `@layer components`. 리치 텍스트 본문(`.rich-text` — 보기·편집 공용)과 편집 영역(`.editor`) 스타일이 여기 있다 — Tailwind preflight 가 지운 목록 점·제목 크기를 되살리고, 서식은 태그·정렬 class 로만 다룬다(`style` 속성 금지 — 백엔드 정화기가 지운다).
+- 사용자 화면·관리자 콘솔이 쓰는 **확장 토큰**(`primary-fixed`·`on-primary-fixed`·`primary-container`·`inverse-primary`·`outline`·`surface-container-low/high/highest`·`tertiary`·`error`)은 `globals.css` 의 첫 `@theme` 에 DESIGN.md 값으로 기본값을 둔다 — 기본 테마(`-NoDesign`)는 12개만 주입하므로 여기서 채우고, DESIGN.md 테마가 같은 이름을 주입하면 뒤에 오는 그 값이 이긴다.
 - 한글 UI 기본 폰트는 **Pretendard**(+ `Noto Sans KR` 폴백) 권장.
 
 ```js
@@ -1032,6 +1177,9 @@ import "./globals.css"
 | `COOKIE_SECURE` | refresh 쿠키의 `Secure` 속성. cookie 방식 + `APP_ENV=production` 이면 `true` 필수(아니면 기동 거부) |
 | `CORS_ORIGINS` | 콤마 구분 허용 출처 |
 | `FRONTEND_URL`, `BACKEND_PUBLIC_URL` | 리다이렉트/콜백 |
+| `UPLOAD_DIR` | 업로드 저장 위치(기본 `uploads` → `backend/uploads/`, 상대 경로는 backend 기준). `public/` 만 `/uploads/public` 으로 정적 서빙 (§8) |
+| `PUBLIC_FILES_BASE_URL` | 공개 파일·첨부 다운로드 URL 접두사. 비우면 루트 상대 경로(같은 오리진 또는 `/uploads` 프록시), 이 템플릿은 비워 두고 Next 가 rewrite 로 같은 오리진에서 내보낸다 (§8·§13) |
+| `MAX_IMAGE_UPLOAD_MB`, `MAX_ATTACHMENT_UPLOAD_MB` | 업로드 크기 상한(MB, 기본 5 / 20) — 초과 시 413 |
 | `APP_ENV` | `production` 이면 안전하지 않은 기본값(기본 `SECRET_KEY`, 관리자 시드)으로 기동을 거부한다 |
 | `SEED_DEFAULT_ADMIN`, `DEFAULT_ADMIN_PASSWORD` | 기동 시 기본 관리자(admin) 시드 여부·초기 비밀번호. **코드 기본값은 꺼짐** — `.env` 에서만 켠다(§21) |
 | `OAUTH_*` | SSO 도입 시(authorize/token/userinfo URL, client id/secret, redirect uri) |
@@ -1040,7 +1188,7 @@ import "./globals.css"
 ### 프론트엔드 (`frontend/.env`) — **서버 전용이 기본, 접두 없음**
 | 키 | 용도 |
 |----|------|
-| `FASTAPI_URL` | Next 서버가 호출할 FastAPI 호스트 (예: `http://127.0.0.1:8000`). **서버에서만 읽는다** |
+| `FASTAPI_URL` | Next 서버가 호출할 FastAPI 호스트 (예: `http://127.0.0.1:8000`). **서버에서만 읽는다**. `next.config.ts` 의 `/uploads`·공개 첨부 rewrite 대상이기도 해서 **빌드 시점 값이 박힌다**(§13 — 바꾸면 다시 빌드) |
 | `NEXT_PUBLIC_*` | 클라이언트 번들에 노출해도 되는 값만 — 현재 skeleton 은 사용하지 않는다 |
 
 - 프론트 환경변수는 **접두 없이 서버 전용으로 두는 것이 기본**이다. Next 서버 코드(`proxy.ts`, 서버 컴포넌트, Server Action, `lib/server/*`)에서 `process.env` 로 읽는다.

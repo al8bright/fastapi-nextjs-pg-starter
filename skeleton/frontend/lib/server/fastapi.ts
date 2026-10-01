@@ -47,7 +47,7 @@ function timeoutMs(): number {
 // 실패 분류·사용자 문구는 순수 로직이라 lib/fastapi-error.ts 로 분리했다 —
 // 이 모듈은 server-only 라 vitest 가 로드하지 못하므로, 테스트 가능한 쪽에 두고
 // 여기서 re-export 해 호출부의 import 경로를 유지한다.
-import { FastapiError, kindFor } from "@/lib/fastapi-error"
+import { FastapiError, kindFor, parseErrorBody } from "@/lib/fastapi-error"
 
 export {
   FastapiError,
@@ -55,25 +55,70 @@ export {
   type FastapiFailureKind,
 } from "@/lib/fastapi-error"
 
-/** 응답 본문에서 문자열 `detail` 만 뽑는다. 파싱 실패는 조용히 null. */
-async function readDetail(response: Response): Promise<string | null> {
+/** 오류 응답 본문을 FastapiError 로. 파싱 실패는 detail 없이. */
+async function errorFrom(response: Response): Promise<FastapiError> {
+  let body: unknown = null
   try {
-    const body: unknown = await response.json()
-    const detail = (body as { detail?: unknown } | null)?.detail
-    return typeof detail === "string" && detail.trim() !== "" ? detail : null
+    body = await response.json()
   } catch {
-    return null
+    // 본문 없음·HTML 오류 페이지 — 상태코드만으로 분류한다.
   }
+  const { detail, code, validation } = parseErrorBody(body)
+  return new FastapiError(kindFor(response.status), response.status, detail, { code, validation })
 }
+
+/** 쿼리 파라미터 값 — undefined·null·빈 문자열은 빠진다(`?q=` 같은 빈 검색 방지). */
+export type QueryValue = string | number | boolean | null | undefined
 
 interface FastapiRequest {
   /** `/auth/me` 처럼 `/api/v1` 이후 경로만 준다. */
   path: string
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE"
-  /** JSON 직렬화할 본문. */
+  /**
+   * 본문. 객체는 JSON 으로 직렬화한다. **FormData 는 multipart 로 그대로** 보낸다 —
+   * Content-Type 을 직접 지정하지 않는다(fetch 가 boundary 를 포함해 채운다).
+   */
   body?: unknown
+  /** 쿼리 파라미터. 빈 값은 빠진다. */
+  query?: Record<string, QueryValue>
   /** Bearer 로 주입할 JWT. 보호 API 는 lib/session 의 getSessionToken() 결과를 넘긴다. */
   token?: string | null
+  /** 이 호출만 응답 대기 상한을 바꾼다(ms) — 큰 파일 업로드 등. */
+  timeoutMs?: number
+}
+
+/** 백엔드 URL(`/api/v1` + path + 쿼리). */
+function buildUrl(path: string, query?: Record<string, QueryValue>): string {
+  const url = `${baseUrl()}${API_PREFIX}${path}`
+  if (!query) return url
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined || value === null || value === "") continue
+    params.set(key, String(value))
+  }
+  const qs = params.toString()
+  return qs ? `${url}?${qs}` : url
+}
+
+/** fetch 한 번 — 네트워크 실패(미기동·타임아웃)는 FastapiError("network") 로 정규화한다. */
+async function send({ path, method = "GET", body, query, token, timeoutMs: timeout }: FastapiRequest): Promise<Response> {
+  const headers: Record<string, string> = { Accept: "application/json" }
+  const isForm = typeof FormData !== "undefined" && body instanceof FormData
+  if (body !== undefined && !isForm) headers["Content-Type"] = "application/json"
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  try {
+    return await fetch(buildUrl(path, query), {
+      method,
+      headers,
+      body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
+      cache: "no-store",
+      // 타임아웃도 AbortError 로 여기 catch 에 걸려 "network" 로 정규화된다 — 화면 문구를 그대로 쓴다.
+      signal: AbortSignal.timeout(timeout ?? timeoutMs()),
+    })
+  } catch {
+    throw new FastapiError("network", 0, null)
+  }
 }
 
 /**
@@ -82,33 +127,9 @@ interface FastapiRequest {
  * 캐시는 항상 `no-store` 다. 사용자별 응답(`/auth/me`)이나 실시간 상태(`/health`)를
  * Next 의 Data Cache 에 넣으면 **다른 사용자에게 캐시된 응답이 나간다**.
  */
-export async function fastapiFetch<T>({
-  path,
-  method = "GET",
-  body,
-  token,
-}: FastapiRequest): Promise<T> {
-  const headers: Record<string, string> = { Accept: "application/json" }
-  if (body !== undefined) headers["Content-Type"] = "application/json"
-  if (token) headers.Authorization = `Bearer ${token}`
-
-  let response: Response
-  try {
-    response = await fetch(`${baseUrl()}${API_PREFIX}${path}`, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-      cache: "no-store",
-      // 타임아웃도 AbortError 로 여기 catch 에 걸려 "network" 로 정규화된다 — 화면 문구를 그대로 쓴다.
-      signal: AbortSignal.timeout(timeoutMs()),
-    })
-  } catch {
-    throw new FastapiError("network", 0, null)
-  }
-
-  if (!response.ok) {
-    throw new FastapiError(kindFor(response.status), response.status, await readDetail(response))
-  }
+export async function fastapiFetch<T>(request: FastapiRequest): Promise<T> {
+  const response = await send(request)
+  if (!response.ok) throw await errorFrom(response)
 
   // 204/205 는 본문이 없다. 또 리버스 프록시가 200 으로 HTML 오류 페이지를 끼워 넣으면
   // json() 이 SyntaxError 를 던지는데, 그대로 두면 FastapiError 가 아닌 예외가 새어 나가
@@ -121,3 +142,12 @@ export async function fastapiFetch<T>({
   }
 }
 
+/**
+ * 응답을 **해석하지 않고** 그대로 돌려준다 — 파일 다운로드를 Route Handler 가 스트리밍으로
+ * 넘겨줄 때만 쓴다(본문을 메모리에 올리지 않는다). 실패(비 2xx)는 fastapiFetch 와 같이 FastapiError.
+ */
+export async function fastapiStream(request: FastapiRequest): Promise<Response> {
+  const response = await send(request)
+  if (!response.ok) throw await errorFrom(response)
+  return response
+}

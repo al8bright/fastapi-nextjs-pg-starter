@@ -624,7 +624,8 @@ cat <<EOF
   ⛔ 배포 전 이 계정의 비밀번호를 바꾸고 SEED_DEFAULT_ADMIN=false, APP_ENV=production 으로 설정하세요.
 
 [확인]    브라우저: http://localhost:3000
-          → '백엔드 API'와 '데이터베이스'가 모두 '정상'이면 성공입니다.
+          → 공개 홈 화면이 보이면 성공입니다. admin 으로 로그인한 뒤 '관리자 콘솔 > 시스템 상태'에서
+            '백엔드 API'와 '데이터베이스'가 모두 '정상'인지 확인하세요.
 
 [DB 변경] 모델 수정 시 (ARCHITECTURE.md §11):
   cd "$BACKEND"

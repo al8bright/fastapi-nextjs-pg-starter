@@ -5,6 +5,68 @@
 
 ---
 
+## 2026-10-02 — 공지사항·배너·관리자 API + 업로드 저장소·본문 HTML 정화 (네 템플릿 공통 백엔드) + 사용자 화면·관리자 콘솔 (Next.js)
+
+### Added (백엔드 — 네 템플릿 공통)
+
+- **테이블 3종** (alembic `0004_notices_banners`) — `notices`(정화된 `body_html`, 고정·게시·`published_at`·조회수, `author_id` SET NULL),
+  `notice_attachments`(공지 CASCADE, 공지당 최대 10개), `banners`(이미지 key·크기, `link_url`, 노출 기간 `starts_at`/`ends_at`, 순서, 활성).
+- **공개 API** — `GET /notices`(게시분만, 고정 먼저 → 게시일 최신순, `page·size·q`), `GET /notices/{id}`(조회수 +1, 첨부 목록),
+  `GET /notices/{id}/attachments/{aid}`(attachment + RFC 5987 `filename*` 한글 파일명 + nosniff), `GET /banners`(활성 + KST 노출 기간 안).
+- **관리자 API** (`/admin/*`, 라우터 단위 `require_admin` — 비로그인 401, 일반 사용자 403) — 대시보드 집계(사용자·세션·잠금·공지·배너·DB 상태·Alembic 리비전),
+  사용자 목록·권한/활성 변경(자기 강등·비활성화 금지, 마지막 활성 관리자 보호 409, 비활성화 시 세션 전부 폐기), 세션 목록·강제 폐기,
+  로그인 잠금 목록·해제, 공지 CRUD·첨부 업로드/다운로드/삭제, 배너 CRUD·이미지 업로드·순서 변경, 에디터 이미지 업로드(`POST /admin/editor/images` → `{key,url,width,height}`).
+- **업로드 저장소** `app/core/storage.py` — `UPLOAD_DIR`(기본 `backend/uploads/`, `.gitignore`) 아래 서버 생성 키로만 저장.
+  이미지는 시그니처 + Pillow 검증(PNG·JPEG·WebP·GIF), EXIF 방향 반영 후 메타데이터 없이 재인코딩, 긴 변 2000px 초과 축소, GIF 는 원본 그대로.
+  첨부는 확장자 허용 목록·무작위 파일명(원본 이름은 DB). `public/` 만 `/uploads/public` 으로 정적 서빙하고 `private/` 첨부는 API 로만 내려간다.
+- **본문 HTML 정화** `app/core/sanitize.py`(nh3) — 에디터 명세 허용 목록. 유튜브 embed 외 iframe 제거 + sandbox 등 강제, `style`·`on*`·`javascript:`·`data:` 제거,
+  링크 `rel="noopener noreferrer"`. 공지 저장 시 서비스 계층에서 항상 정화하고, 정화 후 빈 본문은 422.
+- 새 설정 `UPLOAD_DIR`·`PUBLIC_FILES_BASE_URL`(이 템플릿은 비움 — Next rewrite)·`MAX_IMAGE_UPLOAD_MB`(5)·`MAX_ATTACHMENT_UPLOAD_MB`(20), 의존성 `nh3==0.3.7`·`pillow==12.3.0`.
+- `ServiceError`·`StorageError` 전역 핸들러(`app/api/errors.py`) — 코드별 HTTP 상태 표 한 곳, 응답 `{"detail","code"}`.
+- 백엔드 테스트 → **319** 건(`test_sanitize`·`test_storage`·`test_uploads_serving`·`test_notices`·`test_banners`·`test_admin`).
+
+### Added (프론트엔드 — 사용자 화면 디자인 A · 관리자 콘솔 디자인 A, BFF 그대로)
+
+- **공개 사용자 화면** — 라우트 그룹 `app/(site)/`(상단 내비 레이아웃). 첫 화면 `/` 를 로그인 없이 공개: 배너 캐러셀(이전/다음·점 버튼, 6초 자동 넘김은
+  마우스 올림·포커스·일시정지 버튼으로 멈춤, `prefers-reduced-motion` 이면 자동 넘김 없음, 내부 링크는 `next/link`·외부 링크는 새 창 `noopener`) — 배너가 없으면
+  기본 히어로, 주요 서비스(자리표시), 최신 공지 5건, 내 계정. `/notices`(고정·첨부 표시·제목 검색·페이지 — URL 파라미터, GET 폼 `next/form`),
+  `/notices/<id>`(게시일·조회수·`RichContent` 본문·첨부 다운로드·보던 목록으로), `/me`. 헤더 계정 메뉴(내 정보·로그아웃)와 **admin 에게만** "관리자 콘솔".
+  사용자는 레이아웃(서버)이 `getOptionalUser()`(요청당 한 번 `/auth/me`)로 읽어 표시값만 내려준다.
+- **관리자 콘솔** `app/admin/*` — 그룹형 사이드바(개요·콘텐츠·회원·보안·시스템, 현재 메뉴 `aria-current`, "로그인 잠금" 잠긴 계정 수 배지, 1024px 미만 서랍):
+  대시보드(KPI·최근 세션 강제 종료·잠금 해제), 공지(목록·작성/수정 — 리치 에디터·상단 고정·게시, 첫 저장 뒤 수정 화면 + 첨부 패널: 여러 파일 순차 업로드·사전 검사·삭제),
+  배너(썸네일·기간·활성 토글/순서 이동 `useOptimistic`·삭제, 작성/수정 — 이미지 업로드 미리보기·대체 텍스트 필수·링크 규칙·KST 기간), 사용자(검색·역할 필터·권한/활성 변경·
+  세션 모두 종료, 409 `self_modification`·`last_admin` 한국어 안내), 세션(`?user_id=` 필터·강제 종료), 로그인 잠금, 시스템 상태(헬스 + DB·Alembic 리비전).
+- **관리자 가드** — `proxy.ts`(비로그인 → `/login?next=`) → `app/admin/layout.tsx` 의 `checkAdmin()`(role≠admin → 403 화면, 백엔드 장애 → 오류 화면) →
+  백엔드 `require_admin`(권한 경계). 각 화면 조회는 `loadForPage()`(401 → 로그인, 403 등 → 문구).
+- **자체 리치 텍스트 에디터**(React 템플릿과 같은 코드, 라이브러리 없음 — 서식·이미지 변환/자르기/크기·유튜브 임베드·붙여넣기 정리). 원 가이드 설계대로
+  `uploadImage` 는 **Server Action**(`uploadEditorImageAction` → `POST /admin/editor/images`, 세션의 access 토큰). 에디터는 `next/dynamic(ssr:false)` 로 브라우저에서만 그린다.
+- **서버 데이터·액션** — `lib/server/{notices,banners,admin,load}.ts`(server-only), `lib/actions/{notices,banners,admin,editor}.ts`(조회는 서버 컴포넌트, 변경·업로드는
+  Server Action + `revalidatePath`), `lib/api-error.ts`(도메인 code·413·422 배열 → 한국어), `fastapiFetch` 의 `query`·`FormData`(multipart)·`timeoutMs`·`fastapiStream`,
+  `FastapiError.code`·`.validation`.
+- **업로드 파일 서빙** — `next.config.ts` 의 `rewrites()`(`beforeFiles`)가 `/uploads/*` 와 공개 첨부 `/api/v1/notices/<id>/attachments/<aid>` 를 같은 오리진에서 백엔드로 넘긴다
+  (응답 URL 이 루트 상대라 그대로 동작). 관리자 첨부 다운로드(임시저장 포함)는 Route Handler `app/admin/notices/[id]/attachments/[attachmentId]/route.ts` 가 세션 토큰으로 스트리밍 중계.
+  Server Action·proxy 본문 상한 25mb(`experimental.serverActions.bodySizeLimit`·`proxyClientMaxBodySize`).
+- **CSP** — `frame-src https://www.youtube-nocookie.com https://www.youtube.com`(정확한 호스트만), `img-src` 에 `https://img.youtube.com` 추가, `media-src 'self' blob:`.
+- 저장하지 않은 변경 이탈 확인(`useLeaveGuard` — `beforeunload` + 화면 안 링크 클릭 가로채기 확인 다이얼로그; 뒤로 가기는 막지 못함, 문서화).
+- 확장 디자인 토큰 기본값(`primary-fixed`·`outline`·`surface-container-low/high/highest`·`tertiary`·`error` 등)과 `.rich-text`·`.editor` 스타일을 `globals.css` 에 추가 —
+  기본 테마(`-NoDesign`)에서도 동작하고, DESIGN.md 테마가 주입되면 그 값이 이긴다.
+- 프론트엔드 테스트 4 → **19** 파일, **236** 건(에디터 순수 로직·컴포넌트, 캐러셀, 공지 폼 검증·FormData·이탈 확인, 첨부 패널, 배너 폼, 사용자·잠금 표, 사이드바 활성 상태,
+  오류 문구·목록 파라미터·공개 경로 허용 목록). 새 런타임 의존성은 없다.
+
+### Changed (프론트엔드)
+
+- 첫 화면이 공개 홈이 됐다(이전: 로그인 필수 메인). `app/page.tsx`(메인)·`app/landing`(시스템 상태) 삭제 — 시스템 상태는 `/admin/system` 으로 옮겼다.
+  `/my` 는 `/me` 로 영구 리다이렉트. 로그인 화면에 "홈으로" 링크. 로그아웃 후 이동이 `/login` → `/` 로 바뀌었다.
+- `proxy.ts` — 공개 화면(`lib/public-paths.ts` 의 `isPublicPath`: `/`·`/notices/**`)은 로그인 없이 통과시키되 만료 세션 갱신은 그대로 한다.
+  matcher 제외 목록에 `uploads/`·`api/v1/notices/`(rewrite 되는 파일 경로)를 더했다. matcher 는 계속 **제외 목록**이다(새 화면은 기본이 보호).
+- 스캐폴드 완료 메시지·루트 README 의 확인 안내를 "홈 화면 → 관리자 콘솔 › 시스템 상태" 로 바꿨다.
+
+### ⚠️ 기존 프로젝트에 반영할 때
+
+- 백엔드: `pip install -r requirements.txt` → `alembic upgrade head`(0004) → `backend/.env` 에 위 4개 키 추가(없으면 기본값, `PUBLIC_FILES_BASE_URL` 은 비움). `backend/uploads/` 를 `.gitignore` 에 추가한다.
+- 프론트엔드: `app/`(`(site)`·`admin` 트리, 기존 `page.tsx`·`landing`·`my` 제거)·`components/`·`lib/`·`proxy.ts`·`next.config.ts`(rewrite·CSP·본문 상한)·`globals.css`(확장 토큰·`.rich-text`)를 옮긴다.
+  `FASTAPI_URL` 은 rewrite 대상이라 빌드 시점 값이 박힌다 — 배포 환경 값으로 빌드한다. 새 의존성은 없다.
+
 ## 2026-10-02 — 백엔드 보안 보강 (네 템플릿 공통)
 
 ### Added (추가)

@@ -27,14 +27,45 @@ export class FastapiError extends Error {
   readonly status: number
   /** 서버 `detail` 이 **문자열일 때만** 담는다 (FastAPI 422 는 객체 배열이라 그대로 보여줄 수 없다). */
   readonly detail: string | null
+  /** 도메인 오류 코드 — 백엔드 `{"detail", "code"}` 응답의 code(예: `last_admin`). 없으면 null. */
+  readonly code: string | null
+  /** FastAPI 검증 422(배열 detail)의 첫 메시지 — "Value error, " 접두사를 뗀 값. 없으면 null. */
+  readonly validation: string | null
 
-  constructor(kind: FastapiFailureKind, status: number, detail: string | null) {
+  constructor(
+    kind: FastapiFailureKind,
+    status: number,
+    detail: string | null,
+    extra: { code?: string | null; validation?: string | null } = {},
+  ) {
     super(`FastAPI ${kind} (${status})${detail ? `: ${detail}` : ""}`)
     this.name = "FastapiError"
     this.kind = kind
     this.status = status
     this.detail = detail
+    this.code = extra.code ?? null
+    this.validation = extra.validation ?? null
   }
+}
+
+/**
+ * 오류 응답 본문(JSON 파싱 결과)에서 detail(문자열)·code·검증 메시지를 뽑는다.
+ * lib/server/fastapi.ts 가 응답을 읽은 뒤 이 순수 함수로 분해한다 — 테스트 가능하게 여기 둔다.
+ */
+export function parseErrorBody(body: unknown): {
+  detail: string | null
+  code: string | null
+  validation: string | null
+} {
+  const raw = (body ?? null) as { detail?: unknown; code?: unknown } | null
+  const detail = typeof raw?.detail === "string" && raw.detail.trim() !== "" ? raw.detail : null
+  const code = typeof raw?.code === "string" && raw.code ? raw.code : null
+  let validation: string | null = null
+  if (Array.isArray(raw?.detail) && raw.detail.length > 0) {
+    const msg = (raw.detail[0] as { msg?: unknown } | null)?.msg
+    if (typeof msg === "string" && msg) validation = msg.replace(/^Value error,\s*/, "")
+  }
+  return { detail, code, validation }
 }
 
 export function kindFor(status: number): FastapiFailureKind {

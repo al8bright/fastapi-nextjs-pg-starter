@@ -48,7 +48,7 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
 }
 
 /**
- * 로그아웃. 백엔드의 refresh 토큰을 폐기(revoke)한 뒤 두 쿠키를 지운다.
+ * 로그아웃. 백엔드의 refresh 토큰을 폐기(revoke)한 뒤 두 쿠키를 지우고 홈(/)으로 보낸다.
  *
  * 백엔드 호출은 **best-effort** 다 — 미기동·네트워크 오류로 로그아웃이 막히면 사용자는
  * 세션을 끊을 방법이 없어진다. 로그아웃의 본체는 쿠키 삭제이고, 폐기에 실패한 refresh
@@ -69,5 +69,6 @@ export async function logoutAction(): Promise<void> {
     }
   }
   await clearSessionTokens()
-  redirect("/login")
+  // 첫 화면(/)은 공개라 로그아웃 뒤에도 그대로 볼 수 있다 — 로그인 화면이 아니라 홈으로 보낸다.
+  redirect("/")
 }

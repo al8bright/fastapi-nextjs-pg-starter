@@ -16,7 +16,24 @@
      --color-surface, --color-surface-container, --color-surface-container-lowest,
      --color-primary, --color-error-container, --color-tertiary-container,
      --color-on-surface, --color-on-surface-variant, --color-on-primary,
-     --color-on-error-container, --color-on-tertiary-container, --color-outline-variant */
+     --color-on-error-container, --color-on-tertiary-container, --color-outline-variant
+
+   사용자 화면·관리자 콘솔이 추가로 쓰는 확장 토큰은 바로 아래 @theme 에 DESIGN.md 값으로 기본값을 둔다.
+   기본 테마(-NoDesign)는 12개만 주입하므로 여기서 채우고, DESIGN.md 테마가 같은 이름을 주입하면
+   뒤에 오는 그 값이 이긴다(@theme 는 병합되며 나중 선언 우선). */
+@theme {
+  --color-primary-fixed: #d6e3ff;
+  --color-on-primary-fixed: #001b3d;
+  --color-primary-container: #005eb8;
+  --color-on-primary-container: #c8daff;
+  --color-inverse-primary: #a9c7ff;
+  --color-outline: #727783;
+  --color-surface-container-low: #f3f4f5;
+  --color-surface-container-high: #e7e8e9;
+  --color-surface-container-highest: #e1e3e4;
+  --color-tertiary: #005055;
+  --color-error: #ba1a1a;
+}
 __THEME_CSS__
 
 body {
@@ -24,4 +41,71 @@ body {
   font-family: var(--font-sans, system-ui, sans-serif);
   background-color: var(--color-surface, #f8f9fa);
   color: var(--color-on-surface, #191c1d);
+}
+
+/* ---------- 리치 텍스트 본문 (editor-spec §3) ----------
+   보기(components/RichContent)와 편집 영역(components/editor/RichTextEditor)이 같은 .rich-text 스타일을 쓴다.
+   Tailwind preflight 가 목록 점·번호·제목 크기·여백을 지우므로 여기서 되살린다.
+   서식은 태그·class 로만 저장된다(style 속성 금지) — 정렬 class 와 .video 만 다룬다.
+   토큰은 @theme 이 빠져도 깨지지 않도록 var() 폴백을 둔다. */
+@layer components {
+  .rich-text {
+    line-height: 1.75;
+    overflow-wrap: anywhere;
+  }
+  .rich-text > * + * { margin-top: 0.75em; }
+  .rich-text h2 { font-size: 1.5rem; line-height: 2rem; font-weight: 700; margin-top: 1.5em; }
+  .rich-text h3 { font-size: 1.25rem; line-height: 1.75rem; font-weight: 600; margin-top: 1.25em; }
+  .rich-text > :first-child { margin-top: 0; }
+  .rich-text ul { list-style: disc; padding-left: 1.5em; }
+  .rich-text ol { list-style: decimal; padding-left: 1.5em; }
+  .rich-text ul ul { list-style: circle; }
+  .rich-text li + li { margin-top: 0.25em; }
+  .rich-text blockquote {
+    border-left: 4px solid var(--color-outline-variant, #c2c6d4);
+    padding-left: 1em;
+    color: var(--color-on-surface-variant, #424752);
+  }
+  .rich-text hr { border: 0; border-top: 1px solid var(--color-outline-variant, #c2c6d4); margin: 1.5em 0; }
+  .rich-text a { color: var(--color-primary, #00478d); text-decoration: underline; text-underline-offset: 2px; }
+  .rich-text strong { font-weight: 700; }
+  .rich-text em { font-style: italic; }
+  .rich-text mark { background-color: #fff3a3; color: inherit; padding: 0 0.1em; border-radius: 2px; }
+  .rich-text pre {
+    background: var(--color-surface-container, #edeeef);
+    padding: 0.75em 1em;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    white-space: pre-wrap;
+  }
+  .rich-text code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; }
+  .rich-text table { border-collapse: collapse; width: 100%; display: block; overflow-x: auto; }
+  .rich-text th, .rich-text td { border: 1px solid var(--color-outline-variant, #c2c6d4); padding: 0.4em 0.6em; text-align: left; }
+  .rich-text th { background: var(--color-surface-container, #edeeef); font-weight: 600; }
+  .rich-text img { display: inline-block; max-width: 100%; height: auto; vertical-align: bottom; }
+  .rich-text .align-left { text-align: left; }
+  .rich-text .align-center { text-align: center; }
+  .rich-text .align-right { text-align: right; }
+  .rich-text .video { max-width: 100%; margin: 1em 0; }
+  .rich-text .video iframe { display: block; max-width: 100%; aspect-ratio: 16 / 9; height: auto; border: 0; }
+  .rich-text .align-center .video iframe, .rich-text .video.align-center iframe { margin-inline: auto; }
+
+  /* ---------- 편집 영역 전용 ---------- */
+  .editor { position: relative; caret-color: var(--color-primary, #00478d); }
+  .editor[data-empty="true"]::before {
+    content: attr(data-placeholder);
+    position: absolute;
+    pointer-events: none;
+    color: var(--color-on-surface-variant, #424752);
+    opacity: 0.7;
+  }
+  /* 편집기 안에서는 iframe 이 클릭을 먹지 않게 해 래퍼를 선택할 수 있게 한다. */
+  .editor iframe { pointer-events: none; }
+  .editor img, .editor [data-youtube-video] { cursor: pointer; }
+  .editor [data-selected] { outline: 2px solid var(--color-primary, #00478d); outline-offset: 2px; }
+  .editor img[data-uploading] { opacity: 0.5; animation: editor-uploading 1.2s ease-in-out infinite; max-height: 12rem; }
+  @keyframes editor-uploading { 50% { opacity: 0.25; } }
+  @media (prefers-reduced-motion: reduce) {
+    .editor img[data-uploading] { animation: none; }
+  }
 }

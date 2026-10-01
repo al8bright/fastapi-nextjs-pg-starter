@@ -28,7 +28,7 @@ cd frontend
 pnpm dev
 ```
 
-브라우저에서 <http://localhost:3000>에 접속한다.
+브라우저에서 <http://localhost:3000>에 접속하면 로그인 없이 공개 홈 화면이 보인다. `admin`(비밀번호는 `backend/.env` 의 `DEFAULT_ADMIN_PASSWORD`)으로 로그인하면 상단에 **관리자 콘솔** 링크가 생긴다.
 
 ### 다른 머신에서 clone한 경우
 
@@ -102,6 +102,26 @@ flowchart LR
     Alembic["Alembic 마이그레이션"] -. 스키마 적용 .-> DB
 ```
 
+## 화면 구성
+
+프론트엔드는 **공개 사용자 화면**(`app/(site)/` — 상단 내비)과 **관리자 콘솔**(`app/admin/` — 그룹 사이드바) 두 레이아웃으로 나뉜다. 상세 규칙은 [`ARCHITECTURE.md` §14 "화면 구성 · 레이아웃 · 관리자 가드"](ARCHITECTURE.md#14-프론트엔드-인증-흐름)를 따른다.
+
+| 영역 | 경로 | 내용 |
+|------|------|------|
+| 사용자 (상단 내비) | `/` | 배너 캐러셀(없으면 기본 히어로) · 주요 서비스 · 최신 공지 · 내 계정 |
+| | `/notices`, `/notices/<id>` | 공지 목록(고정·검색·페이지) · 상세(본문·첨부 다운로드) |
+| | `/login`, `/me` | 로그인(원래 위치로 복귀) · 내 정보/로그아웃(로그인 필요) |
+| 관리자 콘솔 (사이드바) | `/admin` | 대시보드 — 사용자·세션·잠금·공지·배너·DB 상태 |
+| | `/admin/notices` | 공지 작성·수정(자체 리치 텍스트 에디터 — 이미지·유튜브), 첨부 업로드·다운로드 |
+| | `/admin/banners` | 배너 이미지 업로드, 링크·노출 기간, 활성 토글, 순서 변경 |
+| | `/admin/users`, `/admin/sessions`, `/admin/login-throttles` | 권한·활성 변경, 세션 강제 종료, 로그인 잠금 해제 |
+| | `/admin/system` | 백엔드·DB 헬스 체크, Alembic 리비전 |
+
+- `/admin/*` 는 비로그인이면 로그인 화면으로(`proxy.ts`), 로그인했지만 관리자가 아니면 403 화면으로(`app/admin/layout.tsx`) 보낸다. 권한 경계는 백엔드(`/api/v1/admin/*` 의 `require_admin`)다.
+- 조회는 서버 컴포넌트, 변경·업로드(에디터 이미지·배너 이미지·첨부)는 Server Action 이다 — 브라우저는 여기서도 FastAPI 를 직접 부르지 않는다. 관리자 첨부 다운로드만 Route Handler 가 세션 토큰으로 중계한다.
+- 업로드 파일은 백엔드 `UPLOAD_DIR`(기본 `backend/uploads/`)에 저장되고, Next 가 `/uploads/*` 와 공개 첨부 다운로드 경로를 같은 오리진에서 백엔드로 rewrite 한다(`next.config.ts` — `FASTAPI_URL` 은 빌드 시점 값이 박힌다).
+- 디자인 토큰은 `DESIGN.md` → `frontend/app/globals.css` 의 `@theme` 다. 화면의 `[대괄호]` 문구(히어로·서비스 카드·푸터)와 자리표시 메뉴(서비스·고객지원)는 프로젝트에 맞게 바꾼다.
+
 ## 인증과 기본 계정
 
 이 프로젝트는 username/password 로그인을 기본 제공한다. FastAPI는 로그인 시 **access JWT(기본 15분)** 와 **DB 세션 기반 refresh 토큰(기본 14일, 불투명 문자열)** 쌍을 발급하고, Next가 이를 httpOnly 쿠키 두 개에 저장한다(운영에서는 `__Host-` 프리픽스). 이후 FastAPI 서버 요청에는 access 토큰을 Bearer로 전달하며, access 쿠키가 만료되면 `proxy.ts`가 refresh 토큰으로 새 쌍을 받아 자동 갱신한다(회전 방식 — 재사용이 감지되면 세션이 폐기된다). 로그아웃은 백엔드에서 refresh 세션을 폐기해 access 토큰도 즉시 무효화한다. 로그인은 계정별 시도 제한(기본 5회 실패 시 15분 잠금, 429)으로 보호되고 보안 이벤트는 `app.audit` 로거에 남는다. 처음 백엔드를 실행할 때 `admin` 계정이 없으면 개발용 관리자 **`admin`** 이 시드된다. 비밀번호는 스캐폴드가 무작위로 생성해 `backend/.env` 의 `DEFAULT_ADMIN_PASSWORD` 에 넣는다.
@@ -109,7 +129,7 @@ flowchart LR
 > [!CAUTION]
 > **시드 관리자는 로컬 개발 전용이다. 배포 전 `APP_ENV=production` 으로 두고 `SECRET_KEY` 를 교체하며 `SEED_DEFAULT_ADMIN=false` 로 끈다 — 두 조건을 어기면 백엔드가 기동을 거부한다.** 전체 항목은 [`ARCHITECTURE.md`의 배포 전 체크리스트](ARCHITECTURE.md#배포-전-체크리스트-스타터-기본값-제거--must)를 확인한다.
 
-`proxy.ts`는 access 쿠키가 없고 refresh 쿠키만 있으면 백엔드로 자동 갱신을 시도하고, 둘 다 없거나 갱신이 401이면 `/login`으로 보낸다. 로그인 성공 후에는 검증된 내부 목적지 또는 홈으로 이동시킨다. `users.role`과 백엔드의 `require_admin` 의존성으로 관리자 API를 보호한다. 프론트는 전 경로에 보안 응답 헤더(CSP, `X-Frame-Options: DENY`, nosniff, Referrer-Policy, Permissions-Policy, 운영 HSTS)를 내보낸다(`next.config.ts`).
+`proxy.ts`는 access 쿠키가 없고 refresh 쿠키만 있으면 백엔드로 자동 갱신을 시도하고, 둘 다 없거나 갱신이 401이면 `/login`으로 보낸다(공개 화면 `/`·`/notices` 는 로그인 없이 통과시키되 만료 세션 갱신은 똑같이 한다). 로그인 성공 후에는 검증된 내부 목적지 또는 홈으로 이동시킨다. `users.role`과 백엔드의 `require_admin` 의존성으로 관리자 API를 보호한다. 프론트는 전 경로에 보안 응답 헤더(CSP, `X-Frame-Options: DENY`, nosniff, Referrer-Policy, Permissions-Policy, 운영 HSTS)를 내보낸다(`next.config.ts`).
 
 ```mermaid
 sequenceDiagram
@@ -154,7 +174,7 @@ sequenceDiagram
     UI->>Next: 로그아웃 Server Action
     Next->>API: POST /api/v1/auth/logout (refresh 폐기, best-effort)
     Next->>Cookie: 두 쿠키 삭제
-    Next-->>UI: 로그인 화면으로 이동
+    Next-->>UI: 공개 홈 화면으로 이동
 ```
 
 ## 프로젝트 구조와 API 확장
@@ -296,8 +316,8 @@ pnpm build
 | sqlalchemy | `== 2.1.1` | httpx2 | `== 2.13.1` |
 | alembic | `== 1.20.0` | pytest | `== 9.1.1` |
 | psycopg2-binary | `== 2.9.13` | ruff | `== 0.16.9` |
-| pydantic | `== 2.13.5` | | |
-| pydantic-settings | `== 2.15.0` | | |
+| pydantic | `== 2.13.5` | nh3 (본문 HTML 정화) | `== 0.3.7` |
+| pydantic-settings | `== 2.15.0` | pillow (업로드 이미지 재인코딩) | `== 12.3.0` |
 | PyJWT | `== 2.15.1` | | |
 
 ### 프론트엔드

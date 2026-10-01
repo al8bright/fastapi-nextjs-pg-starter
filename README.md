@@ -249,7 +249,7 @@ chmod +x scaffold.sh          # 최초 1회 (실행 권한이 없을 때)
 ## 생성 직후
 
 1. 스크립트가 출력한 대로 백엔드(`uvicorn`)·프론트(`pnpm dev`)를 실행
-2. 브라우저 <http://localhost:3000> → 랜딩 페이지에서 **백엔드·DB 연결 상태**가 "정상"이면 성공
+2. 브라우저 <http://localhost:3000> → 공개 홈 화면이 보이면 성공. `admin` 으로 로그인해 **관리자 콘솔 › 시스템 상태**에서 백엔드·DB 연결이 "정상"인지 확인
 3. 생성 프로젝트의 [`README.md`](skeleton/README.md)·[`ARCHITECTURE.md`](skeleton/ARCHITECTURE.md)·
    [`PLAN.md`](skeleton/PLAN.md) 를 읽고 TDD(Red→Green→Refactor)로 개발 시작
 

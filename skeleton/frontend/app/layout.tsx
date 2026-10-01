@@ -7,7 +7,8 @@ import "./globals.css"
 // 쓰지 않기 때문이다. 세션의 단일 출처는 httpOnly 쿠키다 (ARCHITECTURE.md §14).
 
 export const metadata: Metadata = {
-  title: "__PROJECT_NAME__",
+  // 화면별 metadata.title 은 "<제목> | __PROJECT_NAME__" 로 붙는다.
+  title: { default: "__PROJECT_NAME__", template: "%s | __PROJECT_NAME__" },
   description: "공통 아키텍처(FastAPI · Next.js · PostgreSQL) 기반 스타터입니다.",
 }
 

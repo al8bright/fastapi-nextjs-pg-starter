@@ -1,6 +1,7 @@
 import "server-only"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
+import { cache } from "react"
 import { FastapiError, fastapiFetch } from "@/lib/server/fastapi"
 import {
   REFRESH_COOKIE,
@@ -116,3 +117,20 @@ export async function getSessionUser(currentPath: string): Promise<User | null> 
     return null
   }
 }
+
+/**
+ * 로그인 사용자 — **리다이렉트하지 않는** 버전. 공개 화면(헤더의 계정 메뉴·홈의 "내 계정")처럼
+ * 비로그인도 정상인 곳에서 쓴다. 토큰 없음·무효(401)·백엔드 장애는 모두 null(비로그인으로 보인다).
+ *
+ * React `cache()` 로 감싸 **한 요청 안에서는 /auth/me 를 한 번만** 부른다 — 사용자 레이아웃(헤더)과
+ * 홈 화면(내 계정 상자)이 같은 렌더에서 각각 부른다.
+ */
+export const getOptionalUser = cache(async (): Promise<User | null> => {
+  const token = await getSessionToken()
+  if (!token) return null
+  try {
+    return await fastapiFetch<User>({ path: "/auth/me", token })
+  } catch {
+    return null
+  }
+})

@@ -5,11 +5,17 @@ import {
   accessCookieMaxAge,
   sessionCookieOptions,
 } from "@/lib/session-cookie"
+import { isPublicPath } from "@/lib/public-paths"
 import type { TokenResponse } from "@/lib/types"
 
 // 인증 가드 + 자동 세션 갱신 (ARCHITECTURE.md §14). 보호 라우트를 렌더 트리의 가드 컴포넌트가
 // 아니라 **요청 단계**에서 막는다 — 보호 페이지의 HTML 이 브라우저로
 // 나가기 전에 리다이렉트되므로, 미인증 사용자에게 보호 화면이 한 프레임도 깜빡이지 않는다.
+//
+// 공개 화면(홈 `/`·공지 `/notices/**`)은 isPublicPath(lib/public-paths.ts)로 판정해 **로그인 없이 통과**시킨다.
+// 그래도 matcher 에서 빼지 않고 proxy 를 태우는 이유: access 쿠키가 만료되고 refresh 쿠키만 남은
+// 사용자가 공개 화면에 오면 여기서 세션을 이어 줘야 헤더의 계정 메뉴가 "로그인" 으로 잘못 보이지 않는다.
+// 공개 경로에서는 갱신에 실패해도 리다이렉트하지 않는다(그대로 비로그인 화면).
 //
 // ⚠️ access 쿠키는 **존재만** 확인한다. 서명 검증은 하지 않는다.
 //    - proxy 는 모든 요청마다 돈다. 매번 FastAPI 에 물어보면 요청이 2배가 된다.
@@ -24,7 +30,7 @@ import type { TokenResponse } from "@/lib/types"
 //    쿠키는 next/headers 의 cookies() 로, 이동은 NEXT_REDIRECT 를 던지는 redirect() 로 다룬다.
 //    proxy 는 NextRequest 로 읽고 NextResponse 로 쓰고 리다이렉트한다. 서버 래퍼는 production 에서
 //    FASTAPI_URL 이 없으면 throw 한다(아래 fastapiBaseUrl 참고). 공유할 것은 의존성 0 인
-//    lib/session-cookie.ts 에서만 가져오고, 여기서는 fetch/Web API 만 쓴다.
+//    lib/session-cookie.ts·lib/public-paths.ts 에서만 가져오고, 여기서는 fetch/Web API 만 쓴다.
 //
 // Next 16 의 proxy 는 Node.js 런타임에서 돈다. `runtime` 설정은 proxy 파일에서 허용되지 않는다(빌드 에러).
 
@@ -63,14 +69,11 @@ function expireSessionCookies(response: NextResponse): void {
   response.cookies.set(REFRESH_COOKIE, "", sessionCookieOptions(0))
 }
 
-export async function proxy(request: NextRequest) {
-  // access 쿠키가 있으면 통과 — 존재만 본다(파일 머리 주석).
-  if (request.cookies.has(SESSION_COOKIE)) return NextResponse.next()
+/** 세션 갱신 결과 — 성공이면 새 쌍, 401 이면 회복 불가, 그 밖(네트워크·5xx·형식 오류)은 일시 장애. */
+type RefreshOutcome = { kind: "ok"; tokens: TokenResponse } | { kind: "invalid" } | { kind: "unavailable" }
 
-  const refreshToken = request.cookies.get(REFRESH_COOKIE)?.value
-  if (!refreshToken) return redirectToLogin(request)
-
-  // access 는 죽고 refresh 만 남은 상태 — 백엔드에 회전(rotation)을 요청해 세션을 잇는다.
+/** refresh 쿠키로 백엔드에 회전(rotation)을 요청한다. */
+async function refreshSession(refreshToken: string): Promise<RefreshOutcome> {
   let response: Response
   try {
     response = await fetch(`${fastapiBaseUrl()}/api/v1/auth/refresh`, {
@@ -83,27 +86,20 @@ export async function proxy(request: NextRequest) {
   } catch {
     // 네트워크 오류·타임아웃 — 백엔드 **일시 장애**일 수 있다. 여기서 쿠키를 지우면
     // 아직 유효한 refresh 토큰을 파기해, 백엔드가 복구된 뒤에도 전 사용자가 재로그인해야 한다.
-    // 쿠키는 남겨 두고 로그인 화면으로만 보낸다 — 복구 후 보호 경로로 다시 오면 여기서 갱신된다.
-    return redirectToLogin(request)
+    return { kind: "unavailable" }
   }
 
-  if (response.status === 401) {
-    // 무효·만료·폐기·재사용 감지 — 이 refresh 토큰으로는 회복할 수 없다.
-    // 쿠키를 남겨 두면 모든 요청이 실패할 refresh 를 반복하므로 여기서 확실히 지운다.
-    const redirect = redirectToLogin(request)
-    expireSessionCookies(redirect)
-    return redirect
-  }
-
+  // 무효·만료·폐기·재사용 감지 — 이 refresh 토큰으로는 회복할 수 없다.
+  if (response.status === 401) return { kind: "invalid" }
   // 5xx 등 그 밖의 실패 — 토큰 유효성 판정이 아니라 백엔드 문제다. 네트워크 오류와 같은 취급.
-  if (!response.ok) return redirectToLogin(request)
+  if (!response.ok) return { kind: "unavailable" }
 
   let tokens: TokenResponse
   try {
     tokens = (await response.json()) as TokenResponse
   } catch {
     // 리버스 프록시가 200 으로 HTML 오류 페이지를 끼워 넣는 경우 — 백엔드 문제로 취급한다.
-    return redirectToLogin(request)
+    return { kind: "unavailable" }
   }
   if (
     typeof tokens.access_token !== "string" ||
@@ -111,32 +107,61 @@ export async function proxy(request: NextRequest) {
     typeof tokens.expires_in !== "number" ||
     typeof tokens.refresh_expires_in !== "number"
   ) {
-    return redirectToLogin(request)
+    return { kind: "unavailable" }
+  }
+  return { kind: "ok", tokens }
+}
+
+export async function proxy(request: NextRequest) {
+  // access 쿠키가 있으면 통과 — 존재만 본다(파일 머리 주석).
+  if (request.cookies.has(SESSION_COOKIE)) return NextResponse.next()
+
+  const isPublic = isPublicPath(request.nextUrl.pathname)
+  const refreshToken = request.cookies.get(REFRESH_COOKIE)?.value
+  if (!refreshToken) return isPublic ? NextResponse.next() : redirectToLogin(request)
+
+  // access 는 죽고 refresh 만 남은 상태 — 백엔드에 회전(rotation)을 요청해 세션을 잇는다.
+  const outcome = await refreshSession(refreshToken)
+
+  if (outcome.kind === "invalid") {
+    // 쿠키를 남겨 두면 모든 요청이 실패할 refresh 를 반복하므로 여기서 확실히 지운다.
+    // 공개 화면은 그대로 보여 주고(비로그인 상태), 보호 화면은 로그인으로 보낸다.
+    const response = isPublic ? NextResponse.next() : redirectToLogin(request)
+    expireSessionCookies(response)
+    return response
+  }
+  if (outcome.kind === "unavailable") {
+    // 쿠키는 남겨 두고 — 복구 후 다시 오면 여기서 갱신된다 — 보호 화면만 로그인으로 보낸다.
+    return isPublic ? NextResponse.next() : redirectToLogin(request)
   }
 
   // 회전된 새 쌍으로 두 쿠키를 갈아끼우고 원래 요청을 그대로 통과시킨다 —
   // 사용자는 리다이렉트 한 번 없이 세션이 이어진다. NextResponse.next() 의 응답 쿠키는
   // Next 가 같은 요청의 cookies() 에도 반영하므로(13.0.1+), 이어지는 서버 컴포넌트의
   // getSessionToken() 이 새 access 토큰을 바로 읽는다.
+  const { tokens } = outcome
   const next = NextResponse.next()
-  next.cookies.set(
-    SESSION_COOKIE,
-    tokens.access_token,
-    sessionCookieOptions(accessCookieMaxAge(tokens.expires_in)),
-  )
+  next.cookies.set(SESSION_COOKIE, tokens.access_token, sessionCookieOptions(accessCookieMaxAge(tokens.expires_in)))
   next.cookies.set(REFRESH_COOKIE, tokens.refresh_token, sessionCookieOptions(tokens.refresh_expires_in))
   return next
 }
 
 export const config = {
+  // matcher 는 **제외 목록**이다 — 여기서 빠지지 않은 경로는 전부 proxy 를 탄다(새 라우트는 기본이 보호).
   // ⚠️ matcher 에서 /login 과 정적 자산을 빼지 않으면 무한 리다이렉트가 난다
   //    (/login 요청 → 쿠키 없음 → /login 으로 리다이렉트 → …).
-  //    - login(?:/|$)      : 로그인 화면 자신. ⛔ 앵커 없이 `login` 만 쓰면 /login-history 같은
-  //                          평범한 보호 경로까지 가드 밖으로 새어나간다.
-  //    - _next/            : 빌드 산출물·이미지 최적화
-  //    - 정적 자산 확장자   : favicon.ico 등 public 파일. ⛔ "확장자처럼 생긴 모든 것"을 빼면
-  //                          /users/john.doe·/reports/2026.q1 같은 평범한 보호 경로까지 무방비가
-  //                          된다. 그래서 실제 정적 자산 확장자만 열거한다 — public/ 에 다른
-  //                          확장자를 추가하면 이 목록에도 넣어야 한다.
-  matcher: ["/((?!login(?:/|$)|_next/|.*\\.(?:ico|png|jpg|jpeg|gif|svg|webp|avif|css|js|map|txt|xml|json|webmanifest|woff2?)$).*)"],
+  //    - login(?:/|$)        : 로그인 화면 자신. ⛔ 앵커 없이 `login` 만 쓰면 /login-history 같은
+  //                            평범한 보호 경로까지 가드 밖으로 새어나간다.
+  //    - _next/              : 빌드 산출물·이미지 최적화
+  //    - uploads/            : 백엔드 공개 파일(에디터·배너 이미지) — next.config.ts 가 백엔드로 rewrite 한다.
+  //                            세션과 무관한 정적 파일이라 갱신(refresh) 왕복을 태우지 않는다.
+  //    - api/v1/notices/     : 공개 공지 첨부 다운로드 — 위와 같이 백엔드로 rewrite 된다(게시된 공지만 백엔드가 내준다).
+  //    - 정적 자산 확장자     : favicon.ico 등 public 파일. ⛔ "확장자처럼 생긴 모든 것"을 빼면
+  //                            /users/john.doe·/reports/2026.q1 같은 평범한 보호 경로까지 무방비가
+  //                            된다. 그래서 실제 정적 자산 확장자만 열거한다 — public/ 에 다른
+  //                            확장자를 추가하면 이 목록에도 넣어야 한다.
+  // 공개 **화면**(홈·공지)은 여기서 빼지 않는다 — proxy 안의 isPublicPath 가 통과시키면서 만료된 세션을 이어 준다.
+  matcher: [
+    "/((?!login(?:/|$)|_next/|uploads/|api/v1/notices/|.*\\.(?:ico|png|jpg|jpeg|gif|svg|webp|avif|css|js|map|txt|xml|json|webmanifest|woff2?)$).*)",
+  ],
 }
