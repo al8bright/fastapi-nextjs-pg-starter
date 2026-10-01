@@ -21,6 +21,9 @@ os.environ["DEFAULT_ADMIN_PASSWORD"] = "admin123"
 # cookie 모드는 tests/test_auth_cookie_transport.py 가 픽스처에서 명시적으로 바꿔 검증한다.
 os.environ["REFRESH_TOKEN_TRANSPORT"] = "body"
 os.environ["COOKIE_SECURE"] = "false"
+# CORS 출처도 대입이다 — 템플릿마다 생성되는 backend/.env 의 CORS_ORIGINS(3000/5173)가 달라
+# test_security.py 의 preflight 단언이 템플릿에 따라 깨지던 문제(CI scaffold-posix)를 막는다.
+os.environ["CORS_ORIGINS"] = "http://localhost:3000"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
