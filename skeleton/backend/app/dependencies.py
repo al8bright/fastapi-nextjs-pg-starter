@@ -70,8 +70,12 @@ def get_current_user(
 
 
 def require_admin(user: User = Depends(get_current_user)) -> User:
-    """관리자 전용 의존성. 일반 사용자면 403."""
-    if user.role != UserRole.ADMIN.value:
+    """관리자 전용 의존성 — 활성 관리자만 통과, 그 외 인증 사용자는 403 (/api/v1/admin/* 전체에 걸린다).
+
+    역할은 토큰이 아니라 요청마다 DB 에서 읽는다 — 강등되면 access 토큰 만료를 기다리지 않고 바로 403 이다.
+    비활성 계정은 get_current_user 에서 이미 401 이지만, 관리자 검사의 조건으로도 명시해 둔다.
+    """
+    if user.role != UserRole.ADMIN.value or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="관리자 권한이 필요합니다.",

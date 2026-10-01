@@ -8,6 +8,7 @@ import hmac
 import logging
 from datetime import timedelta
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -172,3 +173,37 @@ def revoke(db: Session, refresh_token: str) -> None:
 def refresh_expires_in_seconds(session: AuthSession) -> int:
     """세션 refresh 토큰의 남은 유효 초 (응답의 refresh_expires_in). 만료됐으면 0."""
     return max(0, int((session.expires_at - now()).total_seconds()))
+
+
+def active_session_filter():
+    """'살아 있는 세션' 조건(미폐기·미만료) — 관리자 집계·목록이 is_active_session 과 같은 기준을 쓰게 한다."""
+    return (AuthSession.revoked_at.is_(None)) & (AuthSession.expires_at > now())
+
+
+def revoke_by_id(db: Session, session_id: int) -> bool:
+    """관리자 강제 폐기. 세션이 없으면 False, 이미 폐기됐으면 그대로 True(멱등)."""
+    session = db.get(AuthSession, session_id)
+    if session is None:
+        return False
+    if session.revoked_at is None:
+        session.revoked_at = now()
+        db.commit()
+        audit.info("세션 강제 폐기: session_id=%s user_id=%s", session.id, session.user_id)
+    return True
+
+
+def revoke_all_for_user(db: Session, user_id: int, *, commit: bool = True) -> int:
+    """사용자의 살아 있는 세션을 모두 폐기하고 개수를 돌려준다 (비활성화·관리자 일괄 폐기)."""
+    sessions = (
+        db.execute(select(AuthSession).where(AuthSession.user_id == user_id, active_session_filter()))
+        .scalars()
+        .all()
+    )
+    revoked_at = now()
+    for session in sessions:
+        session.revoked_at = revoked_at
+    if commit:
+        db.commit()
+    if sessions:
+        audit.info("사용자 세션 일괄 폐기: user_id=%s count=%s", user_id, len(sessions))
+    return len(sessions)

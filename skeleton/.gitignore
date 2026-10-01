@@ -14,6 +14,8 @@ venv/
 .ruff_cache/
 *.sqlite3
 *.db
+# 업로드 파일(UPLOAD_DIR 기본값) — 사용자 업로드는 절대 커밋하지 않는다
+backend/uploads/
 
 # === Node / 프론트엔드 (Next.js) ===
 node_modules/

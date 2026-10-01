@@ -24,6 +24,11 @@ os.environ["COOKIE_SECURE"] = "false"
 # CORS 출처도 대입이다 — 템플릿마다 생성되는 backend/.env 의 CORS_ORIGINS(3000/5173)가 달라
 # test_security.py 의 preflight 단언이 템플릿에 따라 깨지던 문제(CI scaffold-posix)를 막는다.
 os.environ["CORS_ORIGINS"] = "http://localhost:3000"
+# 업로드 설정도 대입이다 — backend/.env 의 PUBLIC_FILES_BASE_URL 등이 URL·크기 단언을 흔들지 않게 한다.
+# UPLOAD_DIR 은 아래 upload_dir 픽스처가 테스트마다 임시 디렉터리로 바꾼다.
+os.environ["PUBLIC_FILES_BASE_URL"] = ""
+os.environ["MAX_IMAGE_UPLOAD_MB"] = "5"
+os.environ["MAX_ATTACHMENT_UPLOAD_MB"] = "20"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -105,3 +110,49 @@ def lifespan_client(db_session, db_session_factory, monkeypatch):
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def upload_dir(tmp_path, monkeypatch):
+    """업로드 저장소를 테스트별 임시 디렉터리로 돌린다 — 테스트가 저장소(backend/uploads)에 파일을 남기지 않는다."""
+    path = tmp_path / "uploads"
+    monkeypatch.setenv("UPLOAD_DIR", str(path))
+    get_settings.cache_clear()
+    return path
+
+
+ADMIN_PASSWORD = "admin-pass-123"
+USER_PASSWORD = "user-pass-123"
+
+
+def _bearer(test_client, username: str, password: str) -> dict[str, str]:
+    res = test_client.post("/api/v1/auth/login", json={"username": username, "password": password})
+    assert res.status_code == 200, res.text
+    return {"Authorization": f"Bearer {res.json()['access_token']}"}
+
+
+@pytest.fixture
+def admin_user(db_session):
+    from app.models.user import UserRole
+    from app.services import user_service
+
+    return user_service.create_user(db_session, username="root", password=ADMIN_PASSWORD, role=UserRole.ADMIN)
+
+
+@pytest.fixture
+def admin_headers(client, admin_user):
+    """관리자 Bearer 헤더 (실제 로그인으로 발급 — sid 세션 검사까지 그대로 탄다)."""
+    return _bearer(client, admin_user.username, ADMIN_PASSWORD)
+
+
+@pytest.fixture
+def normal_user(db_session):
+    from app.services import user_service
+
+    return user_service.create_user(db_session, username="member", password=USER_PASSWORD)
+
+
+@pytest.fixture
+def user_headers(client, normal_user):
+    """일반 사용자 Bearer 헤더 — 관리자 API 의 403 검증용."""
+    return _bearer(client, normal_user.username, USER_PASSWORD)

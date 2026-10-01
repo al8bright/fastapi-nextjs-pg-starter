@@ -4,6 +4,17 @@ Alembic env.py 와 lifespan 에서 `import app.models` 만으로 전체 모델�
 """
 from app.models.app_meta import AppMeta
 from app.models.auth_session import AuthSession, LoginThrottle
+from app.models.banner import Banner
+from app.models.notice import Notice, NoticeAttachment
 from app.models.user import User, UserRole
 
-__all__ = ["AppMeta", "AuthSession", "LoginThrottle", "User", "UserRole"]
+__all__ = [
+    "AppMeta",
+    "AuthSession",
+    "Banner",
+    "LoginThrottle",
+    "Notice",
+    "NoticeAttachment",
+    "User",
+    "UserRole",
+]

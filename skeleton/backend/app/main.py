@@ -3,6 +3,7 @@
 - /api/v1 버전 prefix
 - CORS 미들웨어 (메서드/헤더 명시 허용)
 - 보안 응답 헤더 미들웨어 (§9)
+- 업로드 공개 파일 정적 서빙: UPLOAD_DIR/public → /uploads/public (private 은 절대 정적 서빙하지 않는다)
 - DB 스키마는 Alembic 으로만 관리한다 (§11). 여기서 create_all 을 호출하지 않는다.
 """
 import logging
@@ -10,11 +11,14 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
 import app.models  # noqa: F401  모델 메타데이터 등록
+from app.api.errors import register_error_handlers
 from app.api.v1.router import api_router
 from app.config import DEFAULT_SECRET_KEY, get_settings
+from app.core import storage
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +28,32 @@ CORS_ALLOW_HEADERS = ["Authorization", "Content-Type"]
 
 # Cache-Control: no-store 를 강제할 인증 경로 (api_router prefix + auth 라우터 prefix).
 AUTH_PATH_PREFIX = "/api/v1/auth"
+
+# 공개 업로드 파일의 URL 경로. 파일 이름이 무작위(uuid)이고 내용이 바뀌지 않으므로 길게 캐시한다.
+PUBLIC_UPLOADS_PATH = "/uploads/public"
+PUBLIC_UPLOADS_CACHE_CONTROL = "public, max-age=31536000, immutable"
+
+
+class PublicUploadFiles(StaticFiles):
+    """UPLOAD_DIR/public 을 서빙하는 StaticFiles.
+
+    디렉터리를 import 시점이 아니라 요청 시점의 get_settings() 에서 읽는다 — 설정(UPLOAD_DIR)을 바꿔도
+    앱을 다시 만들 필요가 없다(§5 get_settings 원칙, 테스트의 임시 디렉터리 포함).
+    마운트 루트가 public/ 이므로 private/ 첨부는 어떤 경로(../ 포함)로도 닿지 않는다 — StaticFiles 가
+    루트 밖으로 해석되는 경로를 거부한다. 디렉터리 목록(html 모드)은 켜지 않는다.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(directory=None, check_dir=False)
+
+    @property
+    def all_directories(self) -> list:
+        return [storage.public_root()]
+
+    @all_directories.setter
+    def all_directories(self, _value: list) -> None:
+        # StaticFiles.__init__ 이 대입하는 값은 쓰지 않는다(위 property 가 매 요청 설정에서 읽는다).
+        pass
 
 
 @asynccontextmanager
@@ -36,6 +66,9 @@ async def lifespan(_: FastAPI):
     settings = get_settings()
 
     _is_production = settings.app_env == "production"
+
+    # 업로드 디렉터리(public/·private/)가 없으면 만든다.
+    storage.ensure_dirs()
 
     # ⛔ 안전하지 않은 기본값은 프로덕션에서 경고로 넘기지 않는다 — 기동을 막는다.
     #    공개된 서명키는 누구나 admin 토큰을 위조할 수 있다는 뜻이다.
@@ -136,7 +169,11 @@ async def security_headers_middleware(request: Request, call_next):
     if path == AUTH_PATH_PREFIX or path.startswith(AUTH_PATH_PREFIX + "/"):
         # 토큰이 오가는 응답은 어떤 캐시에도 남기지 않는다 (오류·쿠키 삭제 응답 포함).
         response.headers["Cache-Control"] = "no-store"
+    elif path.startswith(PUBLIC_UPLOADS_PATH + "/") and response.status_code == 200:
+        response.headers["Cache-Control"] = PUBLIC_UPLOADS_CACHE_CONTROL
     return response
 
 
+register_error_handlers(app)
 app.include_router(api_router, prefix="/api/v1")
+app.mount(PUBLIC_UPLOADS_PATH, PublicUploadFiles(), name="public-uploads")

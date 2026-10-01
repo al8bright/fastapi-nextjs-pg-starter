@@ -9,6 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,23 @@ class Settings(BaseSettings):
     # URL
     frontend_url: str = "http://localhost:3000"
     backend_public_url: str = "http://localhost:8000"
+
+    # 업로드 저장소 (app/core/storage.py) — 상대 경로는 backend 디렉터리 기준이다.
+    # public/ 아래만 /uploads/public 으로 정적 서빙되고, private/(공지 첨부)는 API 로만 내려간다.
+    upload_dir: Path = BACKEND_ROOT / "uploads"
+    # 공개 파일 URL 접두사. 비우면 응답 URL 이 루트 상대 경로(/uploads/public/...)다 — 프론트엔드가
+    # 백엔드와 같은 오리진(또는 /uploads 프록시)일 때. 브라우저가 백엔드를 다른 오리진으로 직접 부르거나
+    # BFF 뒤에 있으면 백엔드의 공개 주소(예: http://localhost:8000)를 넣는다.
+    public_files_base_url: str = ""
+    # 업로드 크기 상한(MB) — 이미지(에디터·배너)와 공지 첨부.
+    max_image_upload_mb: int = 5
+    max_attachment_upload_mb: int = 20
+
+    @field_validator("upload_dir")
+    @classmethod
+    def _resolve_upload_dir(cls, v: Path) -> Path:
+        # 실행 디렉터리(cwd)에 따라 저장 위치가 달라지지 않게 backend 기준 절대 경로로 고정한다.
+        return v if v.is_absolute() else BACKEND_ROOT / v
 
     @property
     def cors_origin_list(self) -> list[str]:
