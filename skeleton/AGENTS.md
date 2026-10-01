@@ -14,7 +14,7 @@
 
 ## 반드시 지킨다 (시작 전 확인 — 상세는 ARCHITECTURE.md ★MUST 요약)
 
-- **스택 고정**: FastAPI + SQLAlchemy 2.0 + Alembic / Next.js App Router + React Server Components + TypeScript / **PostgreSQL**. 정확한 버전과 버전별 주의사항은 `scripts/versions.env`, `backend/requirements.txt`, `frontend/package.json`과 `stack-versions` 스킬을 확인한다.
+- **스택 고정**: FastAPI + SQLAlchemy 2.1 + Alembic / Next.js App Router + React Server Components + TypeScript / **PostgreSQL**. 정확한 버전과 버전별 주의사항은 `scripts/versions.env`, `backend/requirements.txt`, `frontend/package.json`과 `stack-versions` 스킬을 확인한다.
 - **DB는 항상 Alembic으로만 관리**: 런타임 `create_all`, 자동 DDL, 수동 `ALTER`는 금지한다. 테스트의 in-memory DB만 예외다.
 - **환경 파일 분리**: 백엔드는 `backend/.env`, 프론트엔드는 `frontend/.env`를 사용한다. 각 `.env.example`을 복사하고 실제 `.env`는 커밋하지 않는다.
 - **시각은 KST 단일 기준**: naive `datetime.now()`와 PostgreSQL `timezone=Asia/Seoul` 정책을 유지한다. Unix 계열은 `TZ=Asia/Seoul`과 `tzset()`을 적용한다. Windows는 IANA `TZ`로 프로세스 시각대가 바뀌지 않으므로 OS 시각대를 서울(UTC+9)로 설정해야 하며, 불일치하면 애플리케이션이 경고한다.

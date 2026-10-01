@@ -14,7 +14,7 @@ description: __PROJECT_NAME__ 백엔드에 새 도메인/리소스(예: orders, 
 
 ## 순서 (계층 분리 MUST)
 
-1. **모델** `backend/app/models/<domain>.py` — SQLAlchemy 2.0 `Mapped`/`mapped_column`
+1. **모델** `backend/app/models/<domain>.py` — SQLAlchemy 2.1 `Mapped`/`mapped_column`
    ```python
    from datetime import datetime
    from sqlalchemy import DateTime, String

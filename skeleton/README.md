@@ -280,7 +280,7 @@ pnpm build
 |---|---|---|---|
 | Python | ≥ 3.13 | `3.13.14` 정확 고정 | [`.python-version`](.python-version) — pyenv가 이 버전을 설치 |
 | Node.js | ≥ 24 | `24` major 고정 | [`.nvmrc`](.nvmrc) — fnm이 24.x 최신을 설치 |
-| pnpm | ≥ 11 | `11.27.1` 정확 고정 | [`frontend/package.json`](frontend/package.json)의 `packageManager` — corepack이 활성화 |
+| pnpm | ≥ 11 | `11.28.3` 정확 고정 | [`frontend/package.json`](frontend/package.json)의 `packageManager` — corepack이 활성화 |
 | PostgreSQL | 고정 없음 | — | `psycopg2-binary` 지원 범위(14+ 권장). CI는 `postgres:16` 사용 |
 
 하한은 [`scripts/versions.env`](scripts/versions.env)가 SSOT다(`MIN_PYTHON`·`MIN_NODE`·`MIN_PNPM`).
@@ -291,14 +291,14 @@ pnpm build
 
 | 패키지 | 고정 버전 | 패키지 | 고정 버전 |
 |---|---|---|---|
-| fastapi | `== 0.141.1` | bcrypt | `== 5.0.0` |
-| uvicorn[standard] | `== 0.53.0` | python-multipart | `== 0.0.32` |
-| sqlalchemy | `== 2.0.54` | httpx2 | `== 2.13.1` |
+| fastapi | `== 0.142.2` | bcrypt | `== 5.0.0` |
+| uvicorn[standard] | `== 0.54.0` | python-multipart | `== 0.0.32` |
+| sqlalchemy | `== 2.1.1` | httpx2 | `== 2.13.1` |
 | alembic | `== 1.20.0` | pytest | `== 9.1.1` |
-| psycopg2-binary | `== 2.9.13` | ruff | `== 0.16.8` |
+| psycopg2-binary | `== 2.9.13` | ruff | `== 0.16.9` |
 | pydantic | `== 2.13.5` | | |
 | pydantic-settings | `== 2.15.0` | | |
-| PyJWT | `== 2.15.0` | | |
+| PyJWT | `== 2.15.1` | | |
 
 ### 프론트엔드
 

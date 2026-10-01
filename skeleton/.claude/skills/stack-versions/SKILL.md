@@ -32,7 +32,7 @@ description: __PROJECT_NAME__ 의 고정 스택 버전과 버전별 주의사항
 - ⚠️ **pnpm 12 가 배포돼 있지만 이 템플릿은 11 계열을 유지한다** — 이 절의 함정들이 11 기준이고, 메이저 상향은 워크스페이스 설정 의미가 바뀔 수 있어 §5 검증을 거친 별도 결정으로만 한다.
 - 의존성 **빌드 스크립트가 기본 차단**된다. 허용은 `frontend/pnpm-workspace.yaml` 의 **`allowBuilds` 맵**(`패키지: true`)으로 한다. 현재 허용 목록은 그 파일에서 확인한다.
 - ⛔ pnpm 10 의 **`onlyBuiltDependencies` 리스트는 pnpm 11 에서 무시된다.** 이 서술은 pnpm 10 기준 문서와 정반대이므로 주의할 것. 리스트로 두면 `ERR_PNPM_IGNORED_BUILDS` 가 그대로 발생할 뿐 아니라, **pnpm 이 `pnpm-workspace.yaml` 에 `allowBuilds` 항목을 자동으로 써 넣어 템플릿 파일을 오염시킨다.**
-- ⚠️ **`minimum-release-age` 기본값이 24시간**이다. 배포된 지 24시간이 안 된 버전을 `^` 로 핀하면 설치가 막히고 pnpm 이 `minimumReleaseAgeExclude:` 를 자동 삽입한다(역시 템플릿 오염). → **배포 후 24시간이 지난 버전만 핀한다.** 갓 나온 버전을 급히 올리지 말 것.
+- ⚠️ **`minimum-release-age` 기본값이 24시간**이다. 배포된 지 24시간이 안 된 버전을 `^` 로 핀하면 설치가 막히고 pnpm 이 `minimumReleaseAgeExclude:` 를 자동 삽입한다(역시 템플릿 오염). → **배포 후 24시간이 지난 버전만 핀한다.** 갓 나온 버전을 급히 올리지 말 것. 일괄 상향 때는 `npm view <pkg> time --json` 으로 배포 시각을 확인하고, 24시간이 안 된 최신판은 그 직전 버전으로 핀한다(2026-10 상향 때 vite 8.3.2 → `^8.3.1`).
 - `package.json` 의 `packageManager` 필드로 pnpm 버전 고정(corepack).
 
 ### Next.js (App Router) — `16.3`
@@ -82,9 +82,13 @@ description: __PROJECT_NAME__ 의 고정 스택 버전과 버전별 주의사항
 - 테스트 러너는 **Vitest** + **`@vitejs/plugin-react`** + **jsdom** + Testing Library(`vitest.config.ts` · `vitest.setup.ts` · `pnpm test`). 테스트는 대상 파일 옆에 `*.test.ts(x)`. ⚠️ Vitest 는 tsconfig 의 `paths` 를 읽지 않으므로 `resolve.alias` 에 `@` 를 **다시 적어야** 한다.
 - ⚠️ **서버 컴포넌트·Server Action·`proxy.ts` 는 Vitest 로 테스트하지 않는다.** jsdom 에는 RSC 런타임도 요청 컨텍스트(`cookies()`/`redirect()`)도 없고, `server-only` 를 import 하는 모듈(`lib/server/*`·`lib/session.ts`·`lib/actions/*`)은 러너에서 **로드조차 되지 않는다**. 모킹으로 통과시키면 "초록인데 실제로는 깨지는" 가짜 안전망이 된다. 실제로 덮은 범위는 **`lib/` 의 순수 함수(`safe-redirect`·`session-cookie`·`fastapi-error` 의 `*.test.ts`)와 `components/LoginForm.test.tsx`(클라이언트 폼 — Action 모듈은 `vi.mock`)** 뿐이고, 나머지는 `pnpm build` + 수동 동작 확인으로 대신한다.
 
-### FastAPI 0.141 + Starlette 1.x
+### FastAPI 0.142 + Starlette 1.x
 - TestClient 는 **httpx2** 를 쓴다(httpx 아님). `requirements.txt` 에 `httpx2`. ⛔ `httpx` 로 되돌리면 deprecation 경고.
 - 서버↔서버 HTTP 클라이언트도 `httpx2`.
+
+### SQLAlchemy 2.1 + Alembic 1.20
+- 2.0 → 2.1 상향에서 이 스켈레톤의 모델·서비스·마이그레이션 코드는 **수정 없이** 동작했다(`pytest -W error::DeprecationWarning` 통과). 새 코드도 2.0 스타일(`Mapped`/`mapped_column`·`select()`)을 그대로 쓴다. ⛔ 1.x 레거시 `session.query()` 패턴을 새로 들이지 말 것.
+- ⚠️ `alembic.ini` 의 **`path_separator = os` 를 지우지 마라.** 없으면 Alembic 이 `prepend_sys_path` 를 레거시 방식(공백·쉼표·콜론)으로 쪼개며 `DeprecationWarning` 을 낸다 — Windows 경로의 `C:` 콜론과도 충돌할 수 있다.
 
 ### Pydantic 2.x
 - v2 API(`model_config`, `@field_validator`, `SettingsConfigDict`). ⛔ v1 패턴(`class Config`, `@validator`) 금지.

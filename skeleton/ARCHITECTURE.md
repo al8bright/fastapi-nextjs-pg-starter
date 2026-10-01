@@ -16,7 +16,7 @@
 
 | # | 고정 규칙 (MUST) | § |
 |---|------------------|---|
-| 1 | **표준 스택 고정**: 백엔드 FastAPI 0.141 + SQLAlchemy 2.0 + Alembic, 프론트 **Next.js App Router + React Server Components + TS**, DB는 **PostgreSQL** | §2 |
+| 1 | **표준 스택 고정**: 백엔드 FastAPI 0.142 + SQLAlchemy 2.1 + Alembic, 프론트 **Next.js App Router + React Server Components + TS**, DB는 **PostgreSQL** | §2 |
 | 2 | **DB는 항상 Alembic으로만 관리** — 모든 스키마 생성·변경은 마이그레이션. ⛔ dev/운영 런타임 `create_all`·자동 DDL·수동 `ALTER` 금지(테스트 in-memory만 예외) | §11 |
 | 3 | **설정은 OS 무관한 서비스별 `.env`로 주입** — 백엔드는 `backend/.env`, 프론트는 `frontend/.env` 사용. ⛔ 개발 중 `$env:`/`export`/`set` 셸 환경변수 의존 금지. ⛔ 실제 `.env` 커밋 금지(각 `.env.example`만) | §5, §17 |
 | 4 | **시각은 KST 단일 기준** — `now()`는 naive `datetime.now()`, PostgreSQL `connect_args`에 `timezone=Asia/Seoul`. Unix는 `TZ=Asia/Seoul`, Windows는 OS 시각대를 서울(UTC+9)로 설정. ⛔ UTC 변환/`ZoneInfo` 신규 도입 금지 | §10, §7 |
@@ -66,8 +66,8 @@
 
 ### 백엔드
 - **언어/런타임**: Python 3.13+ (`X | None` 문법, `Mapped[]` 타입 힌트 사용) — 하한은 `scripts/versions.env`(`MIN_PYTHON`), 정확 핀은 루트 `.python-version`(pyenv)
-- **프레임워크**: FastAPI 0.141.x + Uvicorn(`[standard]`) — 정확 핀은 `backend/requirements.txt`(현재 0.141.1)
-- **ORM/마이그레이션**: SQLAlchemy 2.0 (`Mapped`/`mapped_column`) + Alembic
+- **프레임워크**: FastAPI 0.142.x + Uvicorn(`[standard]`) — 정확 핀은 `backend/requirements.txt`(현재 0.142.2)
+- **ORM/마이그레이션**: SQLAlchemy 2.1 (`Mapped`/`mapped_column`) + Alembic
 - **DB 드라이버**: PostgreSQL + `psycopg2-binary`
 - **설정**: `pydantic-settings` (BaseSettings)
 - **검증/직렬화**: Pydantic 2.x
@@ -354,7 +354,7 @@ class Base(DeclarativeBase):
 
 ## 8. 모델 · 스키마 · 서비스 규칙
 
-### 모델 (`models/`) — SQLAlchemy 2.0 `Mapped`
+### 모델 (`models/`) — SQLAlchemy 2.1 `Mapped`
 ```python
 from datetime import datetime
 from sqlalchemy import DateTime, Integer, String

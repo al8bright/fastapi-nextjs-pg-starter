@@ -35,7 +35,7 @@ mindmap
   root((FastAPI + Next.js + PostgreSQL 스타터))
     백엔드
       FastAPI + Uvicorn
-      SQLAlchemy 2.0
+      SQLAlchemy 2.1
       Alembic 마이그레이션
       pytest + ruff
       PostgreSQL
@@ -289,9 +289,9 @@ chmod +x scaffold.sh          # 최초 1회 (실행 권한이 없을 때)
 | 영역 | 고정 방식 | 값 | SSOT |
 |---|---|---|---|
 | 런타임 하한 | 이상이면 기존 설치본 재사용 | Python `≥ 3.13`, Node.js `≥ 24`, pnpm `≥ 11` | [`versions.env`](skeleton/scripts/versions.env) |
-| 런타임 설치 핀 | pyenv·fnm·corepack 이 설치·활성화 | Python `3.13.14`, Node.js `24`(24.x 최신), pnpm `11.27.1` | [`.python-version`](skeleton/.python-version), [`.nvmrc`](skeleton/.nvmrc), `package.json` 의 `packageManager` |
-| 백엔드 패키지 | `==` **정확 고정** (재현성 우선) | fastapi `0.141.1`, sqlalchemy `2.0.54` 등 13개 | [`requirements.txt`](skeleton/backend/requirements.txt) |
-| 프론트엔드 패키지 | 런타임 4종은 `==` 정확 고정, TypeScript 는 `~`, 그 외 도구는 `^` | next `16.3.6`, react·react-dom `19.3.0`, eslint-config-next `16.3.6`, typescript `~6.0.3`, tailwindcss `^4.3.3`, vitest `^5.0.1` 등 | [`package.json`](skeleton/frontend/package.json), [`pnpm-lock.yaml`](skeleton/frontend/pnpm-lock.yaml) |
+| 런타임 설치 핀 | pyenv·fnm·corepack 이 설치·활성화 | Python `3.13.14`, Node.js `24`(24.x 최신), pnpm `11.28.3` | [`.python-version`](skeleton/.python-version), [`.nvmrc`](skeleton/.nvmrc), `package.json` 의 `packageManager` |
+| 백엔드 패키지 | `==` **정확 고정** (재현성 우선) | fastapi `0.142.2`, sqlalchemy `2.1.1` 등 13개 | [`requirements.txt`](skeleton/backend/requirements.txt) |
+| 프론트엔드 패키지 | 런타임 4종은 `==` 정확 고정, TypeScript 는 `~`, 그 외 도구는 `^` | next `16.3.8`, react·react-dom `19.3.0`, eslint-config-next `16.3.8`, typescript `~6.0.3`, tailwindcss `^4.3.3`, vitest `^5.0.3` 등 | [`package.json`](skeleton/frontend/package.json), [`pnpm-lock.yaml`](skeleton/frontend/pnpm-lock.yaml) |
 | PostgreSQL | 고정 없음 | `psycopg2-binary` 지원 범위(14+ 권장), CI 는 `postgres:16` | — |
 
 패키지별 전체 목록은 [생성 프로젝트 README의 기술 스택과 버전](skeleton/README.md#기술-스택과-버전)에 있다.

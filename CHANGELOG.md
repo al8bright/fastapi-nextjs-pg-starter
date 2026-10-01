@@ -5,6 +5,29 @@
 
 ---
 
+## 2026-10-02 — 스택 최신화(FastAPI 0.142·SQLAlchemy 2.1·Next 16.3.8)
+
+### Changed (변경)
+
+- **백엔드 의존성 상향** — fastapi 0.142.2, uvicorn 0.54.0, **sqlalchemy 2.1.1(마이너)**, PyJWT 2.15.1,
+  ruff 0.16.9. 나머지(alembic 1.20.0·psycopg2-binary 2.9.13·pydantic 2.13.5·pydantic-settings 2.15.0·
+  bcrypt 5.0.0·python-multipart 0.0.32·httpx2 2.13.1·pytest 9.1.1)는 이미 최신이라 그대로다.
+  SQLAlchemy 2.1 상향에서 앱 코드 수정은 필요 없었다(`-W error::DeprecationWarning` 으로 pytest 통과).
+- **프론트엔드 의존성 상향** — next·eslint-config-next 16.3.8, vitest 5.0.3, @types/node 24.19.0(24 계열 유지),
+  packageManager pnpm 11.28.3(11 계열 유지), `pnpm-lock.yaml` 재생성. react·react-dom 은 19.3.0 그대로라
+  `eslint.config.mjs` 의 `settings.react.version` 은 바꾸지 않았다. **TypeScript 는 `~6.0.3` 유지**(TS 7 금지 —
+  stack-versions §3).
+- **vite 는 `^8.3.1` 로 핀** — 최신 8.3.2 는 배포 후 24시간이 지나지 않아 pnpm 11 의 `minimum-release-age`
+  에 걸린다(템플릿 오염 방지). 다음 상향 때 올린다.
+- 검증: 임시 스캐폴드 → 백엔드 ruff·pytest 60개 → Alembic PostgreSQL 16 왕복(upgrade→check→downgrade→upgrade→check)
+  → 프론트 lint·typecheck·vitest 29개·build 끝-대-끝 통과. `pnpm-workspace.yaml` 자동 삽입 없음을 확인했다.
+
+### Fixed (수정)
+
+- **`alembic.ini` 에 `path_separator = os` 추가** — 없으면 Alembic 이 `prepend_sys_path` 를 레거시 방식으로
+  쪼개며 DeprecationWarning 을 냈다(`-W error` 검증에서 드러남). stack-versions §3 에 SQLAlchemy 2.1·Alembic
+  항목을 추가했다.
+
 ## 2026-10-02 — 기본 문서 세트 정리 (AGENTS.md 도입, 문서 루트 배치)
 
 생성 프로젝트의 기준 문서 6종을 골격 루트에 두고, `docs/` 는 프로젝트 고유 문서(PRD·유저 플로우·기획서 등) 전용으로 비웠다.
