@@ -501,6 +501,10 @@ ACCESS_TOKEN_EXPIRE_MINUTES=15
 REFRESH_TOKEN_EXPIRE_DAYS=14
 LOGIN_MAX_FAILURES=5
 LOGIN_LOCKOUT_MINUTES=15
+# refresh 토큰 전달 방식 — 이 템플릿은 Next.js 서버(BFF)가 토큰을 받아 자기 httpOnly 쿠키에 보관하므로 body 다.
+# ⛔ 빠뜨리면 코드 기본값(cookie)이 적용돼 응답의 refresh_token 이 null 이 되고 로그인이 실패한다.
+REFRESH_TOKEN_TRANSPORT=body
+COOKIE_SECURE=false
 CORS_ORIGINS=http://localhost:3000
 FRONTEND_URL=http://localhost:3000
 BACKEND_PUBLIC_URL=http://localhost:8000

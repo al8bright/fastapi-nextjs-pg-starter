@@ -5,6 +5,39 @@
 
 ---
 
+## 2026-10-02 — 백엔드 보안 보강 (네 템플릿 공통)
+
+### Added (추가)
+
+- **보안 응답 헤더** — 모든 응답에 `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Cross-Origin-Opener-Policy: same-origin`. HSTS(`max-age=31536000`)는 `COOKIE_SECURE=true` 또는 `APP_ENV=production` 일 때만 보낸다.
+- **`/api/v1/auth/*` 캐시 금지** — 성공·401/422/429·쿠키 삭제 응답 모두 `Cache-Control: no-store`.
+- **로그인 잠금 429 의 `Retry-After`** — 남은 잠금 초(올림·최소 1). 미존재 계정도 동일하게 받아 계정 존재가 드러나지 않는다.
+- `tests/test_security.py` 24건.
+
+### Changed (변경)
+
+- CORS `allow_methods`/`allow_headers` 를 `"*"` 에서 명시 목록(`GET·POST·PUT·PATCH·DELETE·OPTIONS` / `Authorization·Content-Type`)으로 좁히고 `Retry-After` 를 expose 한다.
+- CSP 는 `/docs`·`/redoc` 을 깨뜨리므로 백엔드에서 붙이지 않는다(프론트엔드 호스팅 책임). `ARCHITECTURE.md` §9 에 정리했다.
+
+## 2026-10-02 — refresh 토큰 전달 방식 설정 추가 (네 템플릿 공통 백엔드)
+
+이 저장소의 `skeleton/backend` 를 react·nuxt·svelte 템플릿과 **완전히 같은 백엔드**로 쓰기 위해, refresh 토큰을
+어떻게 주고받을지 설정으로 고를 수 있게 했다. 이 템플릿의 동작(body)은 바뀌지 않는다.
+
+### Added (추가)
+
+- **`REFRESH_TOKEN_TRANSPORT=cookie|body`**, **`COOKIE_SECURE`** (`app/config.py`) — `cookie` 는 브라우저 SPA 용으로 백엔드가
+  httpOnly 쿠키 `refresh_token`(`Path=/api/v1/auth`, `SameSite=lax`)을 직접 설정하고 응답의 `refresh_token` 은 `null` 이다.
+  `body` 는 지금까지의 BFF 방식이다. 코드 기본값은 안전한 쪽인 `cookie` 이고, 이 템플릿의 `.env.example`·스캐폴드가 생성하는
+  `backend/.env` 는 `body` 를 명시한다. cookie 방식 + `APP_ENV=production` 에서 `COOKIE_SECURE=false` 면 기동을 거부한다.
+- **`tests/test_auth_cookie_transport.py`** — cookie 방식 23건(쿠키 속성·회전·재사용 감지·로그아웃·429·운영 fail-fast).
+
+### Changed (변경)
+
+- `TokenResponse.refresh_token` 은 `str | None` 이다(cookie 방식에서 `null`). body 방식에서는 항상 채워진다.
+- ⚠️ 직접 작성한 운영 `.env` 에 `REFRESH_TOKEN_TRANSPORT=body` 가 없으면 cookie 방식으로 동작해 로그인이 실패한다 — 추가할 것.
+- `ARCHITECTURE.md` §9 에 전달 방식 절, §17 환경변수 표에 두 항목을 추가했다.
+
 ## 2026-10-02 — 스택 최신화(FastAPI 0.142·SQLAlchemy 2.1·Next 16.3.8)
 
 ### Changed (변경)

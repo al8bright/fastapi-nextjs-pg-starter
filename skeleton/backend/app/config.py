@@ -7,6 +7,7 @@ import os
 import time
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -43,6 +44,16 @@ class Settings(BaseSettings):
     # 로그인 시도 제한 — 계정별 연속 실패가 max 이상이면 lockout 분 동안 429 로 거부한다.
     login_max_failures: int = 5
     login_lockout_minutes: int = 15
+
+    # refresh 토큰 전달 방식 (§9) — 같은 백엔드 코드가 두 종류의 프론트엔드를 섬긴다.
+    # - "cookie": 백엔드가 httpOnly 쿠키(path=/api/v1/auth)로 직접 심는다. 브라우저 SPA 용이며
+    #             refresh 토큰이 JS 에 노출되지 않는다. 안전한 쪽이 기본값이다.
+    # - "body":   요청/응답 JSON 본문으로 주고받는다. BFF(예: Next.js 서버)가 받아 자기 httpOnly 쿠키에
+    #             보관하는 구조 전용 — 브라우저 JS 가 직접 받는 구성에서는 쓰지 않는다.
+    refresh_token_transport: Literal["cookie", "body"] = "cookie"
+    # refresh 쿠키의 Secure 속성 — HTTPS 운영에서는 반드시 true. production + cookie 모드에서
+    # false 면 main.py 가 기동을 거부한다(평문 HTTP 로 refresh 토큰이 새는 구성을 막는다).
+    cookie_secure: bool = False
 
     # 시각대 (ARCHITECTURE.md §10 KST 단일 기준)
     tz: str = "Asia/Seoul"

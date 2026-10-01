@@ -17,6 +17,10 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key-for-pytest-0123456789abcdef
 os.environ["APP_ENV"] = "test"
 os.environ["SEED_DEFAULT_ADMIN"] = "true"
 os.environ["DEFAULT_ADMIN_PASSWORD"] = "admin123"
+# refresh 전달 방식도 대입이다 — 기존 테스트는 body 모드 계약(본문 refresh_token)을 검증한다.
+# cookie 모드는 tests/test_auth_cookie_transport.py 가 픽스처에서 명시적으로 바꿔 검증한다.
+os.environ["REFRESH_TOKEN_TRANSPORT"] = "body"
+os.environ["COOKIE_SECURE"] = "false"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

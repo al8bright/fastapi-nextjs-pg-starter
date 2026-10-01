@@ -3,6 +3,7 @@
 라우터는 얇게 두고, 사용자 조회·인증·시드는 여기서 처리한다.
 """
 import logging
+import math
 from datetime import timedelta
 
 from sqlalchemy import select
@@ -80,13 +81,22 @@ def _get_throttle(db: Session, username: str) -> LoginThrottle | None:
 
 
 def _check_not_locked(db: Session, username: str) -> None:
-    """잠금 중이면 ServiceError("too_many_attempts") — 라우터가 429 로 변환한다."""
+    """잠금 중이면 ServiceError("too_many_attempts", retry_after=남은 초) — 라우터가 429 + Retry-After 로 변환한다.
+
+    남은 시간은 올림한 정수 초(≥1)다 — 내림하면 클라이언트가 잠금 해제 직전에 재시도해 다시 429 를 받는다.
+    미존재 계정도 같은 스로틀 행을 거치므로 Retry-After 유무·값으로도 계정 존재가 드러나지 않는다.
+    """
     throttle = _get_throttle(db, username)
     if throttle is None or throttle.locked_until is None:
         return
-    if now() < throttle.locked_until:
+    remaining = (throttle.locked_until - now()).total_seconds()
+    if remaining > 0:
         audit.warning("로그인 거부(잠금 중): username=%s", username)
-        raise ServiceError("too_many_attempts", TOO_MANY_ATTEMPTS_MESSAGE)
+        raise ServiceError(
+            "too_many_attempts",
+            TOO_MANY_ATTEMPTS_MESSAGE,
+            retry_after=max(1, math.ceil(remaining)),
+        )
 
 
 def _record_login_failure(db: Session, username: str) -> None:
