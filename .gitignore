@@ -21,3 +21,6 @@ node_modules/
 __pycache__/
 *.pyc
 .next/
+
+# Local tooling
+install-pyenv-win.ps1
